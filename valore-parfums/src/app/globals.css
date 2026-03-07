@@ -1,0 +1,219 @@
+@import "tailwindcss";
+
+/* ── Dark Mode (default) ── */
+:root, html.dark {
+  --bg-base: #0a0a0c;
+  --bg-surface: #111114;
+  --bg-elevated: #18181c;
+  --bg-card: #141417;
+  --bg-input: #0f0f12;
+
+  --gold: #c9a55c;
+  --gold-hover: #b8943f;
+  --gold-light: #d4b876;
+  --gold-dim: #a68a3e;
+  --gold-tint: rgba(201, 165, 92, 0.08);
+  --gold-glow: rgba(201, 165, 92, 0.15);
+
+  --foreground: #f5f0e8;
+  --text-primary: #f5f0e8;
+  --text-secondary: rgba(245, 240, 232, 0.45);
+  --text-muted: rgba(245, 240, 232, 0.25);
+
+  --border: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(201, 165, 92, 0.3);
+  --border-gold: rgba(201, 165, 92, 0.5);
+
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --error: #f87171;
+  --info: #60a5fa;
+
+  --background: var(--bg-base);
+  --shadow-color: rgba(0, 0, 0, 0.5);
+}
+
+/* ── Light Mode ── */
+html.light {
+  --bg-base: #faf8f5;
+  --bg-surface: #f0ede8;
+  --bg-elevated: #ffffff;
+  --bg-card: #ffffff;
+  --bg-input: #f5f3ef;
+
+  --gold: #9a7b3c;
+  --gold-hover: #86692f;
+  --gold-light: #b8943f;
+  --gold-dim: #7a6230;
+  --gold-tint: rgba(154, 123, 60, 0.06);
+  --gold-glow: rgba(154, 123, 60, 0.12);
+
+  --foreground: #1a1a1a;
+  --text-primary: #1a1a1a;
+  --text-secondary: rgba(26, 26, 26, 0.55);
+  --text-muted: rgba(26, 26, 26, 0.35);
+
+  --border: rgba(0, 0, 0, 0.08);
+  --border-hover: rgba(154, 123, 60, 0.3);
+  --border-gold: rgba(154, 123, 60, 0.5);
+
+  --success: #16a34a;
+  --warning: #d97706;
+  --error: #dc2626;
+  --info: #2563eb;
+
+  --background: var(--bg-base);
+  --shadow-color: rgba(0, 0, 0, 0.08);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-gold: var(--gold);
+  --color-gold-light: var(--gold-light);
+  --color-gold-dim: var(--gold-dim);
+  --color-gold-tint: var(--gold-tint);
+  --color-gold-glow: var(--gold-glow);
+  --color-surface: var(--bg-surface);
+  --color-elevated: var(--bg-elevated);
+  --color-card: var(--bg-card);
+  --color-input: var(--bg-input);
+  --color-border: var(--border);
+  --color-border-hover: var(--border-hover);
+  --color-border-gold: var(--border-gold);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+  --color-info: var(--info);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+  --font-mono: var(--font-mono);
+}
+
+/* ── Base ── */
+body {
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* ── Custom Scrollbar ── */
+::-webkit-scrollbar {
+  width: 3px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-base);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--gold-dim);
+  border-radius: 8px;
+}
+
+/* ── Gold Gradient Line ── */
+.gold-line {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+}
+
+/* ── Shimmer / Skeleton ── */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-surface) 25%, var(--bg-elevated) 50%, var(--bg-surface) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 4px;
+}
+
+/* ── Fade-up entrance ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up {
+  animation: fadeUp 0.5s ease forwards;
+}
+
+/* ── Spinner ── */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+/* ── Pulse scroll indicator ── */
+@keyframes pulse-down {
+  0%, 100% { opacity: 0.4; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(6px); }
+}
+.pulse-scroll {
+  animation: pulse-down 2s ease-in-out infinite;
+}
+
+/* ── Marquee ── */
+@keyframes marquee-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.marquee-track {
+  display: inline-flex;
+  animation: marquee-scroll 25s linear infinite;
+}
+
+/* ── Status pill colors ── */
+.status-pending  { background: rgba(251,191,36,0.12); color: #fbbf24; }
+.status-confirmed { background: rgba(96,165,250,0.12); color: #60a5fa; }
+.status-ready    { background: rgba(201,165,92,0.12); color: #c9a55c; }
+.status-completed { background: rgba(74,222,128,0.12); color: #4ade80; }
+.status-cancelled { background: rgba(248,113,113,0.12); color: #f87171; }
+
+/* ── Card hover ── */
+.card-hover {
+  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+}
+.card-hover:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 40px var(--shadow-color);
+  border-color: var(--border-hover);
+}
+
+/* ── Image zoom on hover ── */
+.img-zoom {
+  overflow: hidden;
+}
+.img-zoom img {
+  transition: transform 0.4s ease;
+}
+.img-zoom:hover img {
+  transform: scale(1.08);
+}
+
+/* ── Range slider thumb reset ── */
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: transparent;
+  cursor: pointer;
+}
+input[type="range"]::-moz-range-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+

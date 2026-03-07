@@ -1,0 +1,44 @@
+import { NextResponse } from "next/server";
+// Updated: replaced Prisma with Firestore Admin SDK
+import { db, Collections } from "@/lib/prisma";
+import { v4 as uuid } from "uuid";
+import { Timestamp } from "firebase-admin/firestore";
+
+// GET all bulk pricing rules — Firestore query (replaces prisma.bulkPricingRule.findMany)
+export async function GET() {
+  const snap = await db.collection(Collections.bulkPricingRules).orderBy("minQuantity", "asc").get();
+  const rules = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  return NextResponse.json(rules);
+}
+
+// POST create rule — Firestore doc set (replaces prisma.bulkPricingRule.create)
+export async function POST(req: Request) {
+  const body = await req.json();
+  const id = uuid();
+  const data = {
+    minQuantity: body.minQuantity || 2,
+    discountPercent: body.discountPercent || 0,
+    isActive: body.isActive ?? true,
+    createdAt: Timestamp.now(),
+  };
+  await db.collection(Collections.bulkPricingRules).doc(id).set(data);
+  return NextResponse.json({ id, ...data }, { status: 201 });
+}
+
+// PUT update rule — Firestore doc update (replaces prisma.bulkPricingRule.update)
+export async function PUT(req: Request) {
+  const body = await req.json();
+  const { id, ...data } = body;
+  await db.collection(Collections.bulkPricingRules).doc(id).update(data);
+  const doc = await db.collection(Collections.bulkPricingRules).doc(id).get();
+  return NextResponse.json({ id, ...doc.data() });
+}
+
+// DELETE rule — Firestore doc delete (replaces prisma.bulkPricingRule.delete)
+export async function DELETE(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const id = searchParams.get("id");
+  if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+  await db.collection(Collections.bulkPricingRules).doc(id).delete();
+  return NextResponse.json({ success: true });
+}
