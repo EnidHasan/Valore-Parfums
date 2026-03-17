@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db, Collections, serializeDoc } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
+import { FieldPath } from "firebase-admin/firestore";
 
 function normalizeOrderImagePath(value: unknown): string {
   if (typeof value !== "string") return "";
@@ -70,12 +71,20 @@ export async function GET() {
 
   const perfumeImageById = new Map<string, string>();
   if (missingImagePerfumeIds.size > 0) {
-    await Promise.all(
-      [...missingImagePerfumeIds].map(async (perfumeId) => {
-        const perfumeDoc = await db.collection(Collections.perfumes).doc(perfumeId).get();
-        if (!perfumeDoc.exists) return;
-        const perfume = perfumeDoc.data();
-        if (!perfume) return;
+    const perfumeIds = [...missingImagePerfumeIds];
+    const chunkSize = 10;
+
+    for (let i = 0; i < perfumeIds.length; i += chunkSize) {
+      const chunk = perfumeIds.slice(i, i + chunkSize);
+      const perfumesSnap = await db
+        .collection(Collections.perfumes)
+        .where(FieldPath.documentId(), "in", chunk)
+        .get();
+
+      for (const perfumeDoc of perfumesSnap.docs) {
+        if (!perfumeDoc.exists) continue;
+        const perfume = perfumeDoc.data() as { images?: string };
+        if (!perfume) continue;
 
         const images: string[] = (() => {
           try {
@@ -87,10 +96,10 @@ export async function GET() {
 
         const fallbackImage = normalizeOrderImagePath(images[0]);
         if (fallbackImage) {
-          perfumeImageById.set(perfumeId, fallbackImage);
+          perfumeImageById.set(perfumeDoc.id, fallbackImage);
         }
-      }),
-    );
+      }
+    }
   }
 
   for (const order of ordersWithItems) {
