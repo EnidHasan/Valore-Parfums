@@ -190,7 +190,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
   // Explicit voucher cancellation by admin for this order.
   if (Boolean(removeVoucher)) {
-    const itemsSnap = await db.collection(Collections.orders).doc(id).collection("items").get();
+    const orderRef = db.collection(Collections.orders).doc(id);
+    const itemsSnap = await orderRef.collection("items").get();
     let subtotal = 0;
     let totalCost = 0;
     for (const itemDoc of itemsSnap.docs) {
@@ -202,7 +203,24 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const total = subtotal;
     const profit = total - totalCost;
 
-    await db.collection(Collections.orders).doc(id).update({
+    // If a voucher was previously applied and counted, decrement its usedCount (but not below zero).
+    if (order.voucherCode && order.voucherAppliedAt) {
+      const voucherRef = db.collection(Collections.vouchers).doc(order.voucherCode as string);
+      const voucherSnap = await voucherRef.get();
+      if (voucherSnap.exists) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const voucher = voucherSnap.data() as any;
+        const currentUsedCount = typeof voucher.usedCount === "number" ? voucher.usedCount : 0;
+        if (currentUsedCount > 0) {
+          await voucherRef.update({
+            usedCount: FieldValue.increment(-1),
+            updatedAt: now,
+          });
+        }
+      }
+    }
+
+    await orderRef.update({
       voucherCode: null,
       discount: 0,
       voucherAppliedAt: null,
