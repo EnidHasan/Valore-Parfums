@@ -1,6 +1,17 @@
 import { NextResponse } from "next/server";
 import { db, Collections, serializeDoc } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
+import { FieldPath } from "firebase-admin/firestore";
+
+function normalizeOrderImagePath(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.startsWith("/")) {
+    return trimmed;
+  }
+  return `/${trimmed}`;
+}
 
 // GET /api/orders/my - returns orders for the authenticated user only
 export async function GET() {
@@ -24,11 +35,27 @@ export async function GET() {
 
   const orderDocs = Array.from(orderDocsMap.values());
 
+  const missingImagePerfumeIds = new Set<string>();
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ordersWithItems: any[] = await Promise.all(
     orderDocs.map(async (doc) => {
       const itemsSnap = await db.collection(Collections.orders).doc(doc.id).collection("items").get();
-      const items = itemsSnap.docs.map((itemDoc) => ({ id: itemDoc.id, ...itemDoc.data() }));
+      const items = itemsSnap.docs.map((itemDoc) => {
+        const itemData = itemDoc.data();
+        const perfumeImage = normalizeOrderImagePath(itemData.perfumeImage);
+        const perfumeId = typeof itemData.perfumeId === "string" ? itemData.perfumeId.trim() : "";
+
+        if (!perfumeImage && perfumeId) {
+          missingImagePerfumeIds.add(perfumeId);
+        }
+
+        return {
+          id: itemDoc.id,
+          ...itemData,
+          perfumeImage,
+        };
+      });
       const data = doc.data();
 
       return {
@@ -41,6 +68,49 @@ export async function GET() {
       };
     }),
   );
+
+  const perfumeImageById = new Map<string, string>();
+  if (missingImagePerfumeIds.size > 0) {
+    const perfumeIds = [...missingImagePerfumeIds];
+    const chunkSize = 10;
+
+    for (let i = 0; i < perfumeIds.length; i += chunkSize) {
+      const chunk = perfumeIds.slice(i, i + chunkSize);
+      const perfumesSnap = await db
+        .collection(Collections.perfumes)
+        .where(FieldPath.documentId(), "in", chunk)
+        .get();
+
+      for (const perfumeDoc of perfumesSnap.docs) {
+        if (!perfumeDoc.exists) continue;
+        const perfume = perfumeDoc.data() as { images?: string };
+        if (!perfume) continue;
+
+        const images: string[] = (() => {
+          try {
+            return JSON.parse(perfume.images || "[]");
+          } catch {
+            return [];
+          }
+        })();
+
+        const fallbackImage = normalizeOrderImagePath(images[0]);
+        if (fallbackImage) {
+          perfumeImageById.set(perfumeDoc.id, fallbackImage);
+        }
+      }
+    }
+  }
+
+  for (const order of ordersWithItems) {
+    order.items = (order.items || []).map((item: { perfumeId?: string; perfumeImage?: string }) => {
+      if (item.perfumeImage) return item;
+      return {
+        ...item,
+        perfumeImage: perfumeImageById.get(item.perfumeId || "") || "",
+      };
+    });
+  }
 
   ordersWithItems.sort((a, b) => {
     const da = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
