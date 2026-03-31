@@ -34,11 +34,14 @@ export async function GET() {
   }
   const data = doc.data() || {};
   const legacyDeliveryFee = Number(data.deliveryFee ?? DEFAULTS.deliveryFee);
+  const rawInside = Number(data.deliveryFeeInsideDhaka ?? DEFAULTS.deliveryFeeInsideDhaka);
+  const rawOutside = Number(data.deliveryFeeOutsideDhaka ?? DEFAULTS.deliveryFeeOutsideDhaka);
+  const legacyFallback = Number.isFinite(legacyDeliveryFee) ? Math.max(0, legacyDeliveryFee) : null;
   return NextResponse.json({
     id: doc.id,
     ...data,
-    deliveryFeeInsideDhaka: Number(data.deliveryFeeInsideDhaka ?? legacyDeliveryFee),
-    deliveryFeeOutsideDhaka: Number(data.deliveryFeeOutsideDhaka ?? legacyDeliveryFee),
+    deliveryFeeInsideDhaka: Number.isFinite(rawInside) ? Math.max(0, rawInside) : (legacyFallback ?? DEFAULTS.deliveryFeeInsideDhaka),
+    deliveryFeeOutsideDhaka: Number.isFinite(rawOutside) ? Math.max(0, rawOutside) : (legacyFallback ?? DEFAULTS.deliveryFeeOutsideDhaka),
   });
 }
 

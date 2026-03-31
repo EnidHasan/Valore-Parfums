@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db, Collections, serializeDoc } from "@/lib/prisma";
-import { buildStructuredNotes, getCanonicalNotesLibrary, getNoteLookup } from "../../../../lib/fragrance-notes";
+import { buildStructuredNotes, getCanonicalNotesLibrary, getNoteLookup } from "@/lib/fragrance-notes";
 
 const ACTIVE_CACHE_TTL = 60_000;
 const SEARCH_CACHE_TTL = 20_000;

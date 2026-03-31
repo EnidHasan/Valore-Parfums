@@ -54,7 +54,7 @@ export default function CheckoutPage() {
   const [placing, setPlacing] = useState(false);
   const [orderId, setOrderId] = useState("");
 
-  const sub = useMemo(() => subtotal(), [subtotal]);
+  const sub = subtotal();
   const hasFullBottle = items.some((item) => item.isFullBottle);
   const isDelivery = form.pickupMethod === "Delivery";
   const deliveryFee = useMemo(() => {

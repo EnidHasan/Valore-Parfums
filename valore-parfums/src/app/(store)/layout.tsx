@@ -185,6 +185,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       if (searchDebounce.current) {
         clearTimeout(searchDebounce.current);
       }
+      if (dropdownCloseTimer.current) {
+        clearTimeout(dropdownCloseTimer.current);
+      }
     };
   }, []);
 

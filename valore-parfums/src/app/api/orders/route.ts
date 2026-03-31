@@ -174,6 +174,8 @@ export async function POST(req: Request) {
     // Fetch perfume (replaces prisma.perfume.findUnique)
       const perfumeId = String(item.perfumeId || "").trim();
       if (!perfumeId) continue;
+      const quantity = Math.floor(Number(item.quantity));
+      if (!Number.isFinite(quantity) || quantity <= 0) continue;
       const perfumeDoc = await db.collection(Collections.perfumes).doc(perfumeId).get();
     if (!perfumeDoc.exists) continue;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -221,15 +223,15 @@ export async function POST(req: Request) {
       );
 
     // Apply bulk discount if applicable
-    const bulkRule = bulkRules.find((r: { minQuantity: number }) => item.quantity >= r.minQuantity);
+    const bulkRule = bulkRules.find((r: { minQuantity: number }) => quantity >= r.minQuantity);
     if (bulkRule) {
       unitPrice = Math.ceil(unitPrice * (1 - bulkRule.discountPercent / 100));
     }
 
-    const totalPrice = unitPrice * item.quantity;
+    const totalPrice = unitPrice * quantity;
     const costPrice = isFullBottleItem
       ? 0
-      : ((perfume.purchasePricePerMl || 0) * requestedFullBottleMl + bottleCost + packagingCost) * item.quantity;
+      : ((perfume.purchasePricePerMl || 0) * requestedFullBottleMl + bottleCost + packagingCost) * quantity;
     const itemProfit = totalPrice - costPrice;
     const owner = (perfume.owner || "Store") as OwnerType;
     const ownerProfitPercent = settings?.ownerProfitPercent ?? 85;
@@ -241,15 +243,15 @@ export async function POST(req: Request) {
 
     // Deduct stock (replaces prisma.perfume.update with decrement)
     if (!isFullBottleItem) {
-      await db.collection(Collections.perfumes).doc(item.perfumeId).update({
-        totalStockMl: FieldValue.increment(-(requestedFullBottleMl * item.quantity)),
+      await db.collection(Collections.perfumes).doc(perfumeId).update({
+        totalStockMl: FieldValue.increment(-(requestedFullBottleMl * quantity)),
       });
     }
 
     // Deduct bottle (replaces prisma.bottleInventory.update with decrement)
     if (!isFullBottleItem && bottle && bottle.availableCount > 0) {
       await db.collection(Collections.bottles).doc(bottle.id).update({
-        availableCount: FieldValue.increment(-item.quantity),
+        availableCount: FieldValue.increment(-quantity),
       });
     }
 
@@ -260,7 +262,7 @@ export async function POST(req: Request) {
         ml: requestedFullBottleMl,
         isFullBottle: isFullBottleItem,
         ...(isFullBottleItem ? { fullBottleSize: requestedFullBottleSize } : {}),
-        quantity: Number(item.quantity || 0),
+        quantity,
         unitPrice,
         totalPrice,
         costPrice,
@@ -269,7 +271,7 @@ export async function POST(req: Request) {
         otherOwnerProfit,
       });
 
-      orderCountByPerfume.set(perfumeId, (orderCountByPerfume.get(perfumeId) || 0) + Math.max(1, Number(item.quantity || 0)));
+      orderCountByPerfume.set(perfumeId, (orderCountByPerfume.get(perfumeId) || 0) + quantity);
     }
 
     if (orderItems.length === 0) {
@@ -317,7 +319,7 @@ export async function POST(req: Request) {
     pickupLocationName: orderData.pickupLocationName || "",
     deliveryAddress: orderData.deliveryAddress || "",
     deliveryFee: isDelivery ? deliveryFee : 0,
-    status: orderData.status || "Pending",
+    status: "Pending",
     voucherCode: voucherCode || null,
     discount,
     subtotal,

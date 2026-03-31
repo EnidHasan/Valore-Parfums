@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db, Collections, serializeDoc } from "@/lib/prisma";
 import { Timestamp } from "firebase-admin/firestore";
 import { requireAdmin } from "@/lib/auth";
-import { buildStructuredNotes } from "../../../../lib/fragrance-notes";
+import { buildStructuredNotes } from "@/lib/fragrance-notes";
 
 // GET single perfume (replaces prisma.perfume.findUnique)
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {

@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 import { requireAdmin } from "@/lib/auth";
+
+export const runtime = "nodejs";
 
 const MAX_SIZE_MB = 8;
 
@@ -67,7 +69,7 @@ export async function POST(req: Request) {
       fallbackUrl: `/${relativeDir.replace(/\\/g, "/")}/${id}.png`,
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Image upload failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("Error processing perfume image upload:", error);
+    return NextResponse.json({ error: "Image upload failed" }, { status: 500 });
   }
 }

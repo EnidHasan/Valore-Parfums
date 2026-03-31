@@ -3,10 +3,11 @@ import { db, Collections, serializeDoc } from "@/lib/prisma";
 import { v4 as uuid } from "uuid";
 import { Timestamp } from "firebase-admin/firestore";
 import { requireAdmin } from "@/lib/auth";
-import { buildStructuredNotes } from "../../../lib/fragrance-notes";
+import { buildStructuredNotes, getCanonicalNotesLibrary } from "@/lib/fragrance-notes";
 
 const PERFUMES_CACHE_TTL = 20_000;
 const perfumesCache = new Map<string, { data: unknown[]; ts: number }>();
+const canonicalNotesLibrary = getCanonicalNotesLibrary();
 
 function getDate(value: unknown): Date {
   if (value && typeof value === "object" && "toDate" in value && typeof (value as { toDate?: unknown }).toDate === "function") {
@@ -42,7 +43,7 @@ export async function GET(req: Request) {
     const hasKeyNotes = Array.isArray(perfume.keyNotes) && perfume.keyNotes.length > 0;
     if (hasKeyNotes) return serializeDoc(perfume);
 
-    const notes = buildStructuredNotes(perfume);
+    const notes = buildStructuredNotes(perfume, canonicalNotesLibrary);
     return serializeDoc({
       ...perfume,
       keyNotes: notes.keyNotes,
