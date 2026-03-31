@@ -29,14 +29,15 @@ function asDate(value: SearchPerfume["createdAt"]): Date {
 }
 
 function getSearchCacheKey(params: URLSearchParams): string {
-  return [
-    params.get("q") || "",
-    params.get("category") || "",
-    params.get("season") || "",
-    params.get("bestSeller") || "",
-    params.get("brand") || "",
-    params.get("sort") || "newest",
-  ].join("|");
+  const keyObject = {
+    q: params.get("q") || "",
+    category: params.get("category") || "",
+    season: params.get("season") || "",
+    bestSeller: params.get("bestSeller") || "",
+    brand: params.get("brand") || "",
+    sort: params.get("sort") || "newest",
+  };
+  return JSON.stringify(keyObject);
 }
 
 async function getActivePerfumeIndex(): Promise<{ perfumes: SearchPerfume[]; brands: string[] }> {

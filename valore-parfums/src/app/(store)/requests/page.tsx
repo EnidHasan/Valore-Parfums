@@ -24,7 +24,7 @@ const mlOptions = [3, 6, 10, 15];
 export default function RequestsPage() {
   const { user, loading: authLoading } = useAuth();
   const [requests, setRequests] = useState<UserRequest[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 

@@ -126,7 +126,11 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       .then((data) => {
         if (Array.isArray(data) && data.length > 0) {
           setAnnouncements(data);
-          sessionStorage.setItem(ANNOUNCEMENTS_CACHE_KEY, JSON.stringify({ ts: Date.now(), data }));
+          try {
+            sessionStorage.setItem(ANNOUNCEMENTS_CACHE_KEY, JSON.stringify({ ts: Date.now(), data }));
+          } catch {
+            // ignore storage errors (e.g., disabled, quota exceeded, private mode)
+          }
         }
       })
       .catch(() => {});

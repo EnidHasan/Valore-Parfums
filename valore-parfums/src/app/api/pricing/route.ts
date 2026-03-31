@@ -163,7 +163,7 @@ export async function POST(req: Request) {
   }
   // Cap to 50 to avoid abuse
   const uniqueIds = [...new Set(ids)].slice(0, 50);
-  const cacheKey = uniqueIds.join("|");
+  const cacheKey = [...uniqueIds].sort().join("|");
   const cached = priceResultCache.get(cacheKey);
   if (cached && Date.now() - cached.ts < PRICE_RESULT_CACHE_TTL) {
     return NextResponse.json(cached.data);

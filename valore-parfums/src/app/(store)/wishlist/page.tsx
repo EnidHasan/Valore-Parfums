@@ -21,7 +21,7 @@ interface WishlistItem {
 export default function WishlistPage() {
   const { user } = useAuth();
   const [items, setItems] = useState<WishlistItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const fetchWishlist = useCallback(() => {
     setLoading(true);

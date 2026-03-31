@@ -21,6 +21,9 @@ interface AuthStore {
 const AUTH_ME_TTL = 30_000;
 let lastFetchAt = 0;
 let inFlightFetch: Promise<{ kind: "fetched"; user: UserInfo | null }> | null = null;
+// Monotonic version incremented on every auth mutation (login/signup/logout).
+// fetchUser checks this before applying results to discard stale responses.
+let authVersion = 0;
 
 async function fetchMeOnce(): Promise<{ kind: "fetched"; user: UserInfo | null } | { kind: "skipped" }> {
   const now = Date.now();
@@ -46,7 +49,10 @@ export const useAuth = create<AuthStore>((set) => ({
   loading: true,
 
   fetchUser: async () => {
+    const ver = authVersion;
     const data = await fetchMeOnce();
+    // Discard result if a login/signup/logout happened while the request was in-flight
+    if (authVersion !== ver) return;
     if (data.kind === "fetched") {
       set({ user: data.user, loading: false });
       return;
@@ -66,6 +72,7 @@ export const useAuth = create<AuthStore>((set) => ({
     }
     const user = await res.json();
     lastFetchAt = Date.now();
+    authVersion++;
     set({ user });
     return null;
   },
@@ -82,6 +89,7 @@ export const useAuth = create<AuthStore>((set) => ({
     }
     const user = await res.json();
     lastFetchAt = Date.now();
+    authVersion++;
     set({ user });
     return null;
   },
@@ -89,6 +97,7 @@ export const useAuth = create<AuthStore>((set) => ({
   logout: async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     lastFetchAt = Date.now();
+    authVersion++;
     set({ user: null });
   },
 }));
