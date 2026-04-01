@@ -13,6 +13,12 @@ import {
 } from "@/lib/email";
 import { validateString } from "@/lib/validation";
 
+function normalizeOrderStatus(status?: string): string {
+  if (!status) return "Pending";
+  if (status === "Completed") return "Dispatched";
+  return status;
+}
+
 // GET single order by ID (replaces prisma.order.findUnique with include: items)
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -56,13 +62,14 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const order = orderDoc.exists ? (orderDoc.data() as any) : null;
   if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const previousStatus = order.status || "Pending";
+  const previousStatus = normalizeOrderStatus(order.status || "Pending");
   const requestedStatus = typeof orderPatch.status === "string" ? String(orderPatch.status).trim() : undefined;
-  const newStatus = requestedStatus === "Processing"
+  const mappedStatus = requestedStatus === "Processing"
     ? "Confirmed"
     : requestedStatus === "Ready"
       ? "Out for Delivery"
       : requestedStatus;
+  const newStatus = mappedStatus ? normalizeOrderStatus(mappedStatus) : undefined;
   if (newStatus && newStatus !== requestedStatus) {
     orderPatch.status = newStatus;
   }
@@ -258,8 +265,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     });
   }
 
-  // ── Credit profit when status changes to "Completed" (only if not already Completed) ──
-  if (newStatus === "Completed" && previousStatus !== "Completed") {
+  // ── Credit profit when status changes to "Dispatched" (only if not already dispatched) ──
+  if (newStatus === "Dispatched" && previousStatus !== "Dispatched") {
     const itemsSnap = await db.collection(Collections.orders).doc(id).collection("items").get();
 
     const profitByOwner: Record<string, { ownerProfit: number; otherOwnerProfit: number }> = {};
@@ -379,8 +386,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       }
     }
 
-    // Only reverse profit if profit was previously credited (order was Completed)
-    if (previousStatus === "Completed") {
+    // Only reverse profit if profit was previously credited (order was Dispatched)
+    if (previousStatus === "Dispatched") {
       const profitByOwner: Record<string, { ownerProfit: number; otherOwnerProfit: number }> = {};
       for (const itemDoc of itemsSnap.docs) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -536,7 +543,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     });
   }
 
-  if (customerEmail && (newStatus === "Completed" || newStatus === "Delivered") && previousStatus !== newStatus) {
+  if (customerEmail && newStatus === "Delivered" && previousStatus !== newStatus) {
     void sendEmail(
       generateOrderDeliveredEmail({
         customerName: String(updatedData.customerName || "Customer"),

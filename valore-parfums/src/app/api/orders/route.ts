@@ -301,6 +301,10 @@ export async function POST(req: Request) {
         ? Number.parseFloat(requestedFullBottleSize.replace(/[^0-9.]/g, "")) || 0
         : Number(item.ml || 0);
 
+      if (!isFullBottleItem && !(requestedFullBottleMl > 0)) {
+        return NextResponse.json({ error: "A valid ml value (greater than 0) is required for decant items" }, { status: 400 });
+      }
+
     // Fetch bottle (replaces prisma.bottleInventory.findUnique by ml)
     const bottleSnap = isFullBottleItem
       ? null
@@ -386,7 +390,7 @@ export async function POST(req: Request) {
 
     // Apply voucher (replaces prisma.voucher.findUnique + update)
     let discount = 0;
-    if (voucherCode && !hasFullBottle) {
+    if (voucherCode) {
     const voucherSnap = await db.collection(Collections.vouchers).where("code", "==", voucherCode).limit(1).get();
     if (!voucherSnap.empty) {
       const voucherDoc = voucherSnap.docs[0];
@@ -498,7 +502,7 @@ export async function POST(req: Request) {
     const createdItems = [];
     for (const oi of orderItems) {
       const itemId = uuid();
-      await db.collection(Collections.orders).doc(orderId).collection("items").doc(itemId).set(oi);
+      await db.collection(Collections.orders).doc(orderId).collection("items").doc(itemId).set({ ...oi, orderId });
       createdItems.push({ id: itemId, ...oi });
     }
 

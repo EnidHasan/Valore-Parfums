@@ -4,6 +4,14 @@ import { v4 as uuid } from "uuid";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { requireAdmin } from "@/lib/auth";
 
+function mapRequestStatusToOrderStatus(status: string): string {
+  if (status === "Approved") return "Confirmed";
+  if (status === "Fulfilled") return "Dispatched";
+  if (status === "Declined") return "Cancelled";
+  if (status === "Pending") return "Pending";
+  return status;
+}
+
 // PUT update request status — admin only
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await requireAdmin();
@@ -36,8 +44,13 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     updates.sellingPrice = sp;
   }
 
-  // When marking as fulfilled, calculate profit and distribute to owners
-  if (body.status === "Fulfilled" && existingData.status !== "Fulfilled") {
+  // When marking as fulfilled, calculate profit and distribute to owners.
+  // Treat both "Fulfilled" and "Dispatched" as the same terminal state to avoid
+  // double-crediting when a legacy "Fulfilled" record is later updated to "Dispatched".
+  const TERMINAL_REQUEST_STATUSES = ["Fulfilled", "Dispatched"];
+  const isNewTerminal = TERMINAL_REQUEST_STATUSES.includes(body.status);
+  const wasAlreadyTerminal = TERMINAL_REQUEST_STATUSES.includes(existingData.status);
+  if (isNewTerminal && !wasAlreadyTerminal) {
     const buyingPrice = updates.buyingPrice ?? existingData.buyingPrice;
     const sellingPrice = updates.sellingPrice ?? existingData.sellingPrice;
 
@@ -104,6 +117,13 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
       await batch.commit();
     }
+  }
+
+  const orderRef = db.collection(Collections.orders).doc(id);
+  const orderStatus = body.status ? mapRequestStatusToOrderStatus(String(body.status)) : null;
+
+  if (orderStatus) {
+    await orderRef.set({ status: orderStatus, updatedAt: Timestamp.now() }, { merge: true });
   }
 
   await docRef.update(updates);
