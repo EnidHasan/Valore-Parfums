@@ -68,6 +68,7 @@ function createEmailShell(content: string): string {
     </div>
     <div style="background:#fafaf8; padding: 48px 48px 52px;">${content}</div>
     <div style="background:#0e0e0e; padding:20px 48px; text-align:center;">
+      <p style="font-family:'Montserrat',sans-serif; font-size:10px; color:#8a8a8a; margin-bottom:8px;">Website: https://www.valore.live</p>
       <p style="font-family:'Montserrat',sans-serif; font-size:9px; color:#444; letter-spacing:2px; text-transform:uppercase;">The Art of Fragrance</p>
     </div>
   `;
