@@ -5,6 +5,8 @@ import { requireAdmin } from "@/lib/auth";
 import { v4 as uuid } from "uuid";
 import { splitProfit } from "@/lib/utils";
 import type { OwnerType } from "@/lib/utils";
+import { generateOrderShippedEmail, sendEmail } from "@/lib/email";
+import { validateString } from "@/lib/validation";
 
 // GET single order by ID (replaces prisma.order.findUnique with include: items)
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -51,6 +53,16 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
   const previousStatus = order.status || "Pending";
   const newStatus = typeof orderPatch.status === "string" ? orderPatch.status : undefined;
+
+  if (newStatus === "Cancelled") {
+    const reasonValidation = validateString(orderPatch.cancelReason, "cancelReason", {
+      minLength: 5,
+      maxLength: 500,
+    });
+    if (!reasonValidation.valid) {
+      return NextResponse.json({ error: "Cancellation reason is required", errors: reasonValidation.errors }, { status: 400 });
+    }
+  }
 
   // Fetch settings once (needed for profit crediting & reversal)
   const settingsDoc = await db.collection(Collections.settings).doc("default").get();
@@ -470,6 +482,24 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const items = itemsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
   const updatedData = updatedDoc.data()!;
+
+  if (newStatus === "Shipped" && previousStatus !== "Shipped") {
+    const customerEmail = String(updatedData.customerEmail || "").trim();
+    if (customerEmail) {
+      void sendEmail(
+        generateOrderShippedEmail({
+          customerName: String(updatedData.customerName || "Customer"),
+          customerEmail,
+          orderId: id,
+          trackingNumber: String(updatedData.trackingNumber || "").trim() || undefined,
+          estimatedDelivery: String(updatedData.estimatedDelivery || "").trim() || undefined,
+        }),
+      ).catch((error) => {
+        console.error("Failed to send shipment email:", error);
+      });
+    }
+  }
+
   return NextResponse.json(serializeDoc({
     id: updatedDoc.id,
     ...updatedData,

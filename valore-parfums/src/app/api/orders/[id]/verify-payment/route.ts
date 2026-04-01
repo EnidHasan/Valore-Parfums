@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db, Collections, serializeDoc } from "@/lib/prisma";
 import { Timestamp } from "firebase-admin/firestore";
 import { requireAdmin } from "@/lib/auth";
+import { generatePaymentVerifiedEmail, sendEmail } from "@/lib/email";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await requireAdmin();
@@ -72,6 +73,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   ]);
   const items = itemsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
   const updatedData = updatedOrderDoc.data() || {};
+
+  const customerEmail = String(updatedData.customerEmail || "").trim();
+  if (customerEmail) {
+    void sendEmail(
+      generatePaymentVerifiedEmail({
+        customerName: String(updatedData.customerName || "Customer"),
+        customerEmail,
+        orderId: id,
+        paymentMethod,
+        amount: String(updatedData.total ?? updatedData.subtotal ?? 0),
+      }),
+    ).catch((error) => {
+      console.error("Failed to send payment verification email:", error);
+    });
+  }
 
   return NextResponse.json(serializeDoc({
     id: updatedOrderDoc.id,

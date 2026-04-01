@@ -5,6 +5,8 @@ import type { OwnerType } from "@/lib/utils";
 import { v4 as uuid } from "uuid";
 import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import { getSessionUser, requireAdmin } from "@/lib/auth";
+import { validateBatch, validateEmail, validateOrderData, validateString } from "@/lib/validation";
+import { generateOrderConfirmationEmail, sendEmail } from "@/lib/email";
 
 async function notifyAdminViaWebhook(payload: {
   title: string;
@@ -128,6 +130,28 @@ export async function POST(req: Request) {
     const normalizedPaymentMethod = String(paymentMethod || "Cash on Delivery");
     const isBkashManualPayment = normalizedPaymentMethod === "Bkash Manual";
     const isBankManualPayment = normalizedPaymentMethod === "Bank Manual";
+
+    const orderValidation = validateOrderData({
+      customerName: orderData.customerName,
+      customerEmail: orderData.customerEmail || sessionUser?.email,
+      customerPhone: orderData.customerPhone,
+      deliveryAddress: isDelivery ? orderData.deliveryAddress : undefined,
+    });
+    const pickupValidation = validateString(orderData.pickupMethod, "pickupMethod", {
+      minLength: 4,
+      maxLength: 20,
+    });
+    const validation = validateBatch([orderValidation, pickupValidation]);
+    if (!validation.valid) {
+      return NextResponse.json({ error: "Invalid order input", errors: validation.errors }, { status: 400 });
+    }
+
+    if (orderData.customerEmail || sessionUser?.email) {
+      const emailValidation = validateEmail(orderData.customerEmail || sessionUser?.email, "customerEmail");
+      if (!emailValidation.valid) {
+        return NextResponse.json({ error: "Invalid customer email", errors: emailValidation.errors }, { status: 400 });
+      }
+    }
 
     if (!Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: "Cart items are required" }, { status: 400 });
@@ -476,6 +500,31 @@ export async function POST(req: Request) {
       const itemId = uuid();
       await db.collection(Collections.orders).doc(orderId).collection("items").doc(itemId).set(oi);
       createdItems.push({ id: itemId, ...oi });
+    }
+
+    // Send confirmation email asynchronously (non-blocking)
+    const customerEmail = String(orderDoc.customerEmail || "").trim();
+    if (customerEmail) {
+      void sendEmail(
+        generateOrderConfirmationEmail({
+          orderId,
+          customerName: String(orderData.customerName || "Customer"),
+          customerEmail,
+          items: createdItems.map((it) => ({
+            perfumeName: String(it.perfumeName || "Perfume"),
+            quantity: Number(it.quantity || 0),
+            ml: Number(it.ml || 0),
+            unitPrice: Number(it.unitPrice || 0),
+          })),
+          subtotal,
+          discount,
+          deliveryFee,
+          total,
+          paymentMethod: normalizedPaymentMethod,
+        }),
+      ).catch((error) => {
+        console.error("Failed to send order confirmation email:", error);
+      });
     }
 
     return NextResponse.json(serializeDoc({ id: orderId, ...orderDoc, items: createdItems }), { status: 201 });
