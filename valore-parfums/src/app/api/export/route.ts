@@ -5,16 +5,18 @@ import { requireAdmin } from "@/lib/auth";
 async function getOrderItemsMap(orderIds: string[]) {
   if (orderIds.length === 0) return new Map<string, Array<Record<string, unknown> & { id: string }>>();
 
-  const itemsSnap = await db.collectionGroup("items").get();
-  const orderIdSet = new Set(orderIds);
   const map = new Map<string, Array<Record<string, unknown> & { id: string }>>();
+  const BATCH_SIZE = 20;
 
-  for (const doc of itemsSnap.docs) {
-    const orderId = doc.ref.parent.parent?.id;
-    if (!orderId || !orderIdSet.has(orderId)) continue;
-    const list = map.get(orderId) || [];
-    list.push({ id: doc.id, ...doc.data() });
-    map.set(orderId, list);
+  for (let i = 0; i < orderIds.length; i += BATCH_SIZE) {
+    const chunk = orderIds.slice(i, i + BATCH_SIZE);
+    await Promise.all(
+      chunk.map(async (orderId) => {
+        const snap = await db.collection(Collections.orders).doc(orderId).collection("items").get();
+        const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, unknown>) })) as Array<Record<string, unknown> & { id: string }>;
+        if (items.length > 0) map.set(orderId, items);
+      }),
+    );
   }
 
   return map;

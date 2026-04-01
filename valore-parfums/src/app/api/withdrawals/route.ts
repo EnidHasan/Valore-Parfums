@@ -39,7 +39,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "ownerName is required" }, { status: 400 });
   }
 
-  // Enforce: admin can only withdraw from their own account (verified by email, fallback to name)
+  // Enforce: admin can only withdraw from their own account (verified by email against settings)
   const settingsDoc = await db.collection(Collections.settings).doc("default").get();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const settings = settingsDoc.exists ? (settingsDoc.data() as any) : null;
@@ -47,10 +47,11 @@ export async function POST(req: Request) {
     ownerName === (settings?.owner1Name ?? "Tayeb") ? settings?.owner1Email :
     ownerName === (settings?.owner2Name ?? "Enid") ? settings?.owner2Email : null;
 
-  const emailMatch = ownerEmail && admin.email.toLowerCase() === ownerEmail.toLowerCase();
-  const nameMatch = !ownerEmail && admin.name.toLowerCase().includes(ownerName.toLowerCase());
+  if (!ownerEmail) {
+    return NextResponse.json({ error: "Owner account not properly configured or unrecognized" }, { status: 403 });
+  }
 
-  if (!emailMatch && !nameMatch) {
+  if (admin.email.toLowerCase() !== ownerEmail.toLowerCase()) {
     return NextResponse.json({ error: "You can only withdraw from your own account" }, { status: 403 });
   }
 
@@ -60,13 +61,9 @@ export async function POST(req: Request) {
   const account = accountDoc.exists ? (accountDoc.data() as any) : { totalEarned: 0, storeShareEarned: 0 };
   const totalEarned = (account.totalEarned || 0) + (account.storeShareEarned || 0);
 
-  // Sum existing withdrawals for this owner
-  const wSnap = await db.collection(Collections.withdrawals).get();
-  let totalWithdrawn = 0;
-  for (const doc of wSnap.docs) {
-    const w = doc.data();
-    if (w.ownerName === ownerName) totalWithdrawn += w.amount || 0;
-  }
+  // Sum existing withdrawals for this owner (query only this owner's records)
+  const wSnap = await db.collection(Collections.withdrawals).where("ownerName", "==", ownerName).get();
+  const totalWithdrawn = wSnap.docs.reduce((sum, doc) => sum + (doc.data().amount || 0), 0);
 
   const available = totalEarned - totalWithdrawn;
   if (amount > available) {

@@ -1,17 +1,8 @@
 import { NextResponse } from "next/server";
 import { db, Collections, serializeDoc } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
+import { normalizeOrderImagePath } from "@/lib/utils";
 import { FieldPath } from "firebase-admin/firestore";
-
-function normalizeOrderImagePath(value: unknown): string {
-  if (typeof value !== "string") return "";
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-  if (trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.startsWith("/")) {
-    return trimmed;
-  }
-  return `/${trimmed}`;
-}
 
 // GET /api/orders/my - returns orders for the authenticated user only
 export async function GET() {

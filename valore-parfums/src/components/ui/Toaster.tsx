@@ -19,17 +19,23 @@ export function Toaster() {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
     addToastFn = (t) => {
       const id = Math.random().toString(36).slice(2);
       setToasts((prev) => [...prev, { ...t, id }]);
-      setTimeout(() => {
+      const t1 = setTimeout(() => {
         setToasts((prev) => prev.map((x) => (x.id === id ? { ...x, leaving: true } : x)));
       }, 3000);
-      setTimeout(() => {
+      const t2 = setTimeout(() => {
         setToasts((prev) => prev.filter((x) => x.id !== id));
       }, 3400);
+      timers.push(t1, t2);
     };
-    return () => { addToastFn = null; };
+    return () => {
+      addToastFn = null;
+      timers.forEach(clearTimeout);
+    };
   }, []);
 
   const iconColor = (type: Toast["type"]) => {
