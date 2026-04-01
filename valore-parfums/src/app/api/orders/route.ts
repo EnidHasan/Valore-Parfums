@@ -213,9 +213,11 @@ export async function POST(req: Request) {
         fieldErrors.customerName = "Customer name is required";
       }
       if (!/^01\d{9}$/.test(normalizedBkashPayment.paidFromNumber)) {
-        fieldErrors.paidFromNumber = "Paid from number must be a valid 11-digit mobile number";
+        fieldErrors.paidFromNumber = "Paid from number must be exactly 11 digits and start with 01";
       }
-      if (!/^[A-Za-z0-9-]{6,40}$/.test(normalizedBkashPayment.transactionNumber)) {
+      if (normalizedBkashPayment.transactionNumber.length < 6 || normalizedBkashPayment.transactionNumber.length > 40) {
+        fieldErrors.transactionNumber = "Transaction number must be 6-40 characters";
+      } else if (!/^[A-Za-z0-9-]+$/.test(normalizedBkashPayment.transactionNumber)) {
         fieldErrors.transactionNumber = "Transaction number must be 6-40 characters (letters, numbers, hyphen)";
       }
       if (Object.keys(fieldErrors).length > 0) {
@@ -228,11 +230,17 @@ export async function POST(req: Request) {
       if (!normalizedBankPayment.accountName || normalizedBankPayment.accountName.length < 2) {
         fieldErrors.accountName = "Account/Card name is required";
       }
-      if (!/^[0-9A-Za-z-]{8,32}$/.test(normalizedBankPayment.accountNumber)) {
-        fieldErrors.accountNumber = "Account/Card number must be 8-32 characters (letters, numbers, hyphen)";
+      if (normalizedBankPayment.accountNumber.length < 8 || normalizedBankPayment.accountNumber.length > 32) {
+        fieldErrors.accountNumber = "Account/Card number must be 8-32 characters";
+      } else if (!/^[0-9A-Za-z-]+$/.test(normalizedBankPayment.accountNumber)) {
+        fieldErrors.accountNumber = "Account/Card number can only contain letters, numbers, and hyphen";
       }
-      if (!/^[A-Za-z0-9-]{6,40}$/.test(normalizedBankPayment.transactionNumber)) {
-        fieldErrors.transactionNumber = "Transaction number/reference must be 6-40 characters (letters, numbers, hyphen)";
+      if (normalizedBankPayment.transactionNumber) {
+        if (normalizedBankPayment.transactionNumber.length < 6 || normalizedBankPayment.transactionNumber.length > 40) {
+          fieldErrors.transactionNumber = "Transaction number/reference must be 6-40 characters";
+        } else if (!/^[A-Za-z0-9-]+$/.test(normalizedBankPayment.transactionNumber)) {
+          fieldErrors.transactionNumber = "Transaction number/reference can only contain letters, numbers, and hyphen";
+        }
       }
       if (Object.keys(fieldErrors).length > 0) {
         return NextResponse.json({ error: "Invalid bank payment details", fieldErrors }, { status: 400 });

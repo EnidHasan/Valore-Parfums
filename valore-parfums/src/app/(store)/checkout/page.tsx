@@ -221,14 +221,15 @@ export default function CheckoutPage() {
     const bkashComplete =
       form.paymentMethod !== "Bkash Manual" ||
       (bkashPayment.customerName.trim().length > 1 &&
-        bkashPayment.paidFromNumber.trim().length >= 11 &&
-        bkashPayment.transactionNumber.trim().length >= 6);
+        bkashPayment.paidFromNumber.trim().length === 11 &&
+        bkashPayment.transactionNumber.trim().length >= 6 &&
+        bkashPayment.transactionNumber.trim().length <= 40);
 
     const bankComplete =
       form.paymentMethod !== "Bank Manual" ||
       (bankPayment.accountName.trim().length > 1 &&
-        bankPayment.accountNumber.trim().length >= 6 &&
-        bankPayment.transactionNumber.trim().length >= 6);
+        bankPayment.accountNumber.trim().length >= 8 &&
+        bankPayment.accountNumber.trim().length <= 32);
 
     return items.length > 0 && contactComplete && (pickupComplete || deliveryComplete) && !missingSize && bkashComplete && bankComplete;
   }, [bankPayment, bkashPayment, form, items]);
@@ -262,11 +263,14 @@ export default function CheckoutPage() {
       if (!bkashPayment.customerName.trim()) {
         return toast("bKash customer name is required", "error");
       }
-      if (!bkashPayment.paidFromNumber.trim()) {
-        return toast("Paid from number is required", "error");
+      if (!/^[0-9]{11}$/.test(bkashPayment.paidFromNumber.trim())) {
+        return toast("Paid from number must be exactly 11 digits", "error");
       }
       if (!bkashPayment.transactionNumber.trim()) {
         return toast("Transaction number is required", "error");
+      }
+      if (bkashPayment.transactionNumber.trim().length < 6 || bkashPayment.transactionNumber.trim().length > 40) {
+        return toast("Transaction number must be 6-40 characters", "error");
       }
     }
     if (form.paymentMethod === "Bank Manual") {
@@ -276,8 +280,11 @@ export default function CheckoutPage() {
       if (!bankPayment.accountNumber.trim()) {
         return toast("Account/Card number is required", "error");
       }
-      if (!bankPayment.transactionNumber.trim()) {
-        return toast("Transaction number/reference is required", "error");
+      if (bankPayment.accountNumber.trim().length < 8 || bankPayment.accountNumber.trim().length > 32) {
+        return toast("Account/Card number must be 8-32 characters", "error");
+      }
+      if (bankPayment.transactionNumber.trim() && (bankPayment.transactionNumber.trim().length < 6 || bankPayment.transactionNumber.trim().length > 40)) {
+        return toast("Transaction number/reference must be 6-40 characters", "error");
       }
     }
 
@@ -697,9 +704,11 @@ export default function CheckoutPage() {
 
                   <ol className="list-decimal pl-5 space-y-1.5 text-sm text-[var(--text-secondary)]">
                     <li>Transfer the required payment amount to our bank account using NPSB only (no BEFTN allowed).</li>
-                    <li>Copy the transaction number/reference from your payment receipt.</li>
+                    <li>If available, copy the transaction number/reference from your payment receipt.</li>
                     <li>Fill in the form below with your payment details.</li>
                   </ol>
+
+                  <p className="mt-3 text-xs text-[var(--text-muted)]">Fields marked (Required) must be filled. Others are optional.</p>
 
                   <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2.5">
@@ -745,7 +754,7 @@ export default function CheckoutPage() {
 
                   <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
                     <label className="block">
-                      <span className="block text-xs uppercase tracking-[0.16em] text-[var(--text-muted)] mb-2">Account/Card Name</span>
+                      <span className="block text-xs uppercase tracking-[0.16em] text-[var(--text-muted)] mb-2">Account/Card Name (Required)</span>
                       <input
                         type="text"
                         value={bankPayment.accountName}
@@ -754,7 +763,7 @@ export default function CheckoutPage() {
                       />
                     </label>
                     <label className="block">
-                      <span className="block text-xs uppercase tracking-[0.16em] text-[var(--text-muted)] mb-2">Account/Card Number</span>
+                      <span className="block text-xs uppercase tracking-[0.16em] text-[var(--text-muted)] mb-2">Account/Card Number (Required)</span>
                       <input
                         type="text"
                         value={bankPayment.accountNumber}
@@ -763,7 +772,7 @@ export default function CheckoutPage() {
                       />
                     </label>
                     <label className="block md:col-span-2">
-                      <span className="block text-xs uppercase tracking-[0.16em] text-[var(--text-muted)] mb-2">Transaction Number / Reference</span>
+                      <span className="block text-xs uppercase tracking-[0.16em] text-[var(--text-muted)] mb-2">Transaction Number / Reference (Optional)</span>
                       <input
                         type="text"
                         value={bankPayment.transactionNumber}
