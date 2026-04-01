@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db, Collections, serializeDoc } from "@/lib/prisma";
 import { Timestamp } from "firebase-admin/firestore";
 import { requireAdmin } from "@/lib/auth";
-import { generatePaymentVerifiedEmail, sendEmail } from "@/lib/email";
+import { generateOrderConfirmedEmail, sendEmail } from "@/lib/email";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await requireAdmin();
@@ -72,17 +72,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     orderRef.collection("items").get(),
   ]);
   const items = itemsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const emailItems = items.map((item) => {
+    const row = item as Record<string, unknown>;
+    return {
+      perfumeName: String(row.perfumeName || "Perfume"),
+      quantity: Number(row.quantity || 0),
+      ml: Number(row.ml || 0),
+      unitPrice: Number(row.unitPrice || 0),
+    };
+  });
   const updatedData = updatedOrderDoc.data() || {};
 
   const customerEmail = String(updatedData.customerEmail || "").trim();
   if (customerEmail) {
     void sendEmail(
-      generatePaymentVerifiedEmail({
+      generateOrderConfirmedEmail({
         customerName: String(updatedData.customerName || "Customer"),
         customerEmail,
         orderId: id,
-        paymentMethod,
-        amount: String(updatedData.total ?? updatedData.subtotal ?? 0),
+        items: emailItems,
+        total: Number(updatedData.total ?? updatedData.subtotal ?? 0),
       }),
     ).catch((error) => {
       console.error("Failed to send payment verification email:", error);
