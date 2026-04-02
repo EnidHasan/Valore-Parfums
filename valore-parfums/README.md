@@ -51,6 +51,16 @@ Valore Parfums is a full-stack fragrance commerce platform for decants and full-
 - Wishlist add/remove.
 - Theme persistence (light/dark).
 
+- Responsive navigation with desktop dropdowns and mobile expandable menu
+- Category, season, and brand shortcuts in nav
+- Announcement marquee with session-cached data
+- Global search modal with debounced API search
+- Dynamic cart item count indicator
+- Skeleton and empty states for loading/empty pages
+- Product cards: out-of-stock, best-seller, and category labels
+- Sticky mobile checkout bar
+- Copy order ID utility in tracking and admin
+
 ### Auth and Accounts
 
 - Email/password signup and login with secure sessions.
@@ -58,6 +68,11 @@ Valore Parfums is a full-stack fragrance commerce platform for decants and full-
 - Session-backed user retrieval (me endpoint).
 - Profile endpoint for saved delivery/pickup details used by checkout.
 - Guest checkout support.
+
+- Password hashing with PBKDF2 and legacy hash migration
+- Google sign-in via popup and ID token exchange
+- Role-aware session model (customer/admin)
+- Profile API for getting/updating name, phone, and saved delivery info
 
 ### Checkout and Payments
 
@@ -73,6 +88,12 @@ Valore Parfums is a full-stack fragrance commerce platform for decants and full-
 - Order creation for both signed-in and guest customers.
 - Optional admin webhook alerts for manual payment submissions.
 
+- Direct Buy Now path from product page
+- Payment-method-specific form validation (bKash/bank fields)
+- Voucher compatibility logic for full-bottle/manual pricing
+- Checkout profile auto-fill from saved user profile
+- Mobile sticky place-order bar
+
 ### Orders, Tracking, and Cancellation
 
 - Full order lifecycle with status transitions.
@@ -86,6 +107,12 @@ Valore Parfums is a full-stack fragrance commerce platform for decants and full-
   - profit reversal when applicable
   - cancellation email and admin notification
 
+- Status normalization for legacy labels in tracking UI
+- Payment-method-specific status stepper (COD/bKash/Bank)
+- Rich order cards with line items, size labels, and fallback image logic
+- Voucher/discount display in tracking totals
+- Auto-refresh polling and visibility-change refresh for order history
+
 ### Inventory and Pricing
 
 - Perfume catalog CRUD.
@@ -97,6 +124,22 @@ Valore Parfums is a full-stack fragrance commerce platform for decants and full-
 - Stock decrement on order placement.
 - Stock restoration on cancellation.
 
+- Owner assignment per perfume (Store/individual owner)
+- Personal-collection mode (pricing override)
+- Note ID and label indexing for robust search/filter
+- Top/middle/base note selectors with searchable chips
+- Key-note generation and note index persistence
+- PNG-oriented perfume image upload pipeline
+- Inventory list with search across name/brand/inspired-by
+- Bottle/decant size management with enable/disable and deletion
+- Pickup location management with active toggle
+- Notification/announcement management with active toggle and preview
+- Voucher management: code, type, value, min order, usage, expiry, active state
+- Bulk pricing rule management (min quantity, discount percent)
+- Tier margins by brand tier and size buckets
+- Packaging cost, delivery fee, payment account/QR config
+- Owner names/shares/profit settings
+
 ### Customer and Procurement Requests
 
 - Customer request creation (decant/full bottle).
@@ -104,11 +147,34 @@ Valore Parfums is a full-stack fragrance commerce platform for decants and full-
 - Procurement/stock request pipeline for out-of-stock demand.
 - My Requests page with improved historical retrieval coverage.
 
+- Request validation differs by type (ml required for decant, bottle size for full bottle)
+- Request creation auto-creates linked placeholder order and item
+- Stock request creation also creates linked sourcing order records
+- Admin can update request status and map to order status
+- Admin can set buying/selling price for request fulfillment
+- Request fulfillment auto-calculates profit and distributes to owner accounts
+
 ### Admin Back Office
 
 - Dashboard metrics and reporting APIs.
 - Panels for inventory, bottles, decant sizes, orders, vouchers, requests, stock requests, pickup locations, notifications, notes library, settings, exports.
 - Financial tooling for owner accounts and withdrawals.
+
+- Unified admin orders center with tabbed modes (orders, requests, procurement)
+- Status filters with counts, payment-method filters, date-range filters, size-type filters
+- Sort by newest, oldest, highest total, highest profit
+- Quick filter for pending bank verifications
+- Status transition engine with normalization for legacy/new labels
+- Mandatory cancellation reason validation for cancelled transitions
+- Full bottle manual line-item pricing updates by admin
+- Manual line-item buying price support for full-bottle profitability
+- Order subtotal/discount/total/profit recomputation after manual updates
+- Voucher remove/recompute support at order level
+- Manual payment verification endpoint for bKash and bank
+- Payment audit trail storage with verifier, time, and note
+- Status-driven email dispatch from order updates
+- Cancellation flow restores stock and bottle counts, reverses profits, decrements voucher usage
+- Admin notifications for key events (cancellations, manual payments)
 
 ### Financial and Profit Accounting
 
@@ -117,6 +183,16 @@ Valore Parfums is a full-stack fragrance commerce platform for decants and full-
 - Withdrawal recording/history.
 - Profit reversal entries on cancellation when applicable.
 - Full-bottle admin pricing supports buy/sell entry and recalculated profit.
+
+- Per-item cost, profit, ownerProfit, and otherOwnerProfit tracking
+- Dispatch/completion-stage profit crediting to owner accounts
+- Cross-owner share distribution logic
+- Store-owned item profit split by configured owner shares
+- Profit transaction ledger with typed entries (sale, store-share, cross-owner-share, withdrawal, request_profit)
+- Owner account summary endpoint with available-balance computation
+- Withdrawal creation endpoint with positive amount validation, owner identity enforcement, balance sufficiency checks
+- Negative transaction entry for withdrawals
+- Request fulfillment profit split flow credited to both owners
 
 ### Notifications and Email
 
@@ -130,6 +206,13 @@ Valore Parfums is a full-stack fragrance commerce platform for decants and full-
   - cancelled
 - Cancellation email includes reason and conditional refund policy text.
 
+- Announcement notification system for storefront
+- Status-triggered email sends on order transitions and payment verification
+- Cancellation email supports paid vs unpaid messaging and conditional refund
+- Shared email shell ensures consistent branding
+- Email rendering hardened for dark/light mode readability
+- Footer website link is clickable across all email templates
+
 ### Security and Validation
 
 - Session and role checks for protected endpoints.
@@ -138,8 +221,36 @@ Valore Parfums is a full-stack fragrance commerce platform for decants and full-
 - Proxy-layer security headers, CORS, and rate limiting.
 - Shared validation utilities used in critical APIs.
 
-## API Surface (Implemented)
+- Middleware/proxy enforces admin route protection
+- Security headers set globally (frame, content type, referrer, permissions, etc.)
+- HSTS in production
+- API CORS handling with configurable allowed origin
+- API route-level in-memory rate limiting
+- Firestore rules deny direct client reads/writes by default
+- Input validation and field bounds across key write endpoints
+- Sanitization and truncation patterns for user-provided strings
 
+### Performance and Data Access Patterns
+
+- Multiple API caches with TTL for hot endpoints (perfumes, pricing config/results, notifications, checkout config)
+- Batched Firestore access patterns to reduce N+1 reads
+- Collection-group reads for order item aggregation
+- Sorted in-memory fallback patterns where Firestore composite indexes are not assumed
+- Frontend render optimization with memoized components and debounced inputs
+- Conditional polling and snapshot checks in tracking UI
+## API Surface (Implemented)
+### Maintenance and Data-Fix Tooling
+
+- Settings audit script for margins/sizes/bottles
+- Stock/brand consistency audit script with optional brand-fix apply mode
+- Tier-margins cleanup script for invalid legacy sizes
+- Bottle cleanup script for removing deprecated bottle sizes
+- Decant-size migration script (5ml to 6ml conversion path and 30ml removal)
+
+### Admin Routing Decisions
+
+- Dedicated admin requests and stock-requests pages route to unified orders management
+- Admin notes-library route redirects to inventory where note assignment is integrated
 - Auth:
   - POST /api/auth/signup
   - POST /api/auth/login
