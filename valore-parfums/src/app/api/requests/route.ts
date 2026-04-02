@@ -25,13 +25,34 @@ export async function GET(req: Request) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Login required" }, { status: 401 });
 
-  const snap = await db
-    .collection(Collections.requests)
-    .where("userId", "==", user.id)
-    .orderBy("createdAt", "desc")
-    .get();
+  const requestsRef = db.collection(Collections.requests);
+  const queries = [requestsRef.where("userId", "==", user.id).get()];
+  if (user.email) {
+    queries.push(requestsRef.where("userEmail", "==", user.email).get());
+  }
 
-  const requests = snap.docs.map((doc) => serializeDoc({ id: doc.id, ...doc.data() }));
+  const snapshots = await Promise.all(queries);
+  const merged = new Map<string, Record<string, unknown>>();
+
+  for (const snap of snapshots) {
+    for (const doc of snap.docs) {
+      merged.set(doc.id, { id: doc.id, ...doc.data() });
+    }
+  }
+
+  const getCreatedAtTime = (value: unknown) => {
+    if (value && typeof value === "object" && "toDate" in value) {
+      const date = (value as { toDate?: () => Date }).toDate?.();
+      return date ? date.getTime() : 0;
+    }
+    const parsed = new Date(String(value || "")).getTime();
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
+  const requests = Array.from(merged.values())
+    .sort((a, b) => getCreatedAtTime(b.createdAt) - getCreatedAtTime(a.createdAt))
+    .map((row) => serializeDoc(row));
+
   return NextResponse.json(requests);
 }
 

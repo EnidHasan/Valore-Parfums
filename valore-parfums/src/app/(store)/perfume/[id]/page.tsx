@@ -6,7 +6,8 @@ import { useAuth } from "@/store/auth";
 import { toast } from "@/components/ui/Toaster";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, Minus, Plus, ShoppingBag, Heart } from "lucide-react";
+import { ArrowLeft, Minus, Plus, ShoppingBag, Heart, Zap } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 interface Perfume {
   id: string;
@@ -61,6 +62,7 @@ export default function PerfumePage({ params }: { params: Promise<{ id: string }
 
   const addItem = useCart((s) => s.addItem);
   const { user } = useAuth();
+  const router = useRouter();
 
   useEffect(() => {
     Promise.all([
@@ -105,28 +107,45 @@ export default function PerfumePage({ params }: { params: Promise<{ id: string }
   const images: string[] = perfume ? JSON.parse(perfume.images || "[]") : [];
   const outOfStock = perfume && perfume.totalStockMl <= 0;
 
+  // Pick the highest matching bulk tier for a given quantity.
+  const getBulkRuleForQuantity = (targetQuantity: number) =>
+    bulkRules.reduce<BulkRule | null>((best, rule) => {
+      if (targetQuantity < rule.minQuantity) return best;
+      if (!best || rule.minQuantity > best.minQuantity) return rule;
+      return best;
+    }, null);
+
+  const getDecantUnitPrice = (targetQuantity: number) => {
+    if (!selectedPrice) return 0;
+    const bulkRule = getBulkRuleForQuantity(targetQuantity);
+    const discountPercent = bulkRule?.discountPercent ?? 0;
+    return Math.ceil(selectedPrice.sellingPrice * (1 - discountPercent / 100));
+  };
+
   // Calculate bulk discount for current quantity
-  const activeBulkRule = bulkRules.find((r) => quantity >= r.minQuantity);
+  const activeBulkRule = getBulkRuleForQuantity(quantity);
   const bulkDiscountPercent = activeBulkRule?.discountPercent ?? 0;
-  const decantUnitPrice = selectedPrice ? Math.ceil(selectedPrice.sellingPrice * (1 - bulkDiscountPercent / 100)) : 0;
+  const decantUnitPrice = getDecantUnitPrice(quantity);
   const effectiveUnitPrice = selectedOption === "full-bottle" ? 0 : decantUnitPrice;
   const totalDisplayPrice = effectiveUnitPrice * quantity;
   const requestHref = perfume
     ? `/requests?perfumeName=${encodeURIComponent(perfume.name)}&brand=${encodeURIComponent(perfume.brand || "")}&type=full_bottle`
     : "/requests?type=full_bottle";
 
-  const handleAddToCart = () => {
+  const addCurrentSelectionToCart = (nextQuantity: number) => {
     if (!perfume) return;
 
     if (selectedOption === "decant" && !selectedPrice) return;
+
+    const unitPrice = selectedOption === "full-bottle" ? 0 : getDecantUnitPrice(nextQuantity);
 
     addItem({
       perfumeId: perfume.id,
       perfumeName: perfume.name,
       ml: selectedOption === "full-bottle" ? 0 : (selectedPrice?.ml ?? 0),
       isFullBottle: selectedOption === "full-bottle",
-      quantity,
-      unitPrice: effectiveUnitPrice,
+      quantity: nextQuantity,
+      unitPrice,
       image: images[0],
     });
     toast(
@@ -135,7 +154,18 @@ export default function PerfumePage({ params }: { params: Promise<{ id: string }
         : `${perfume.name} ${selectedPrice?.ml}ml added to cart`,
       "success",
     );
+  };
+
+  const handleAddToCart = () => {
+    addCurrentSelectionToCart(quantity);
     setQuantity(1);
+  };
+
+  const handleOrderNow = () => {
+    if (!perfume || selectedOption !== "decant" || !selectedPrice?.available) return;
+    addCurrentSelectionToCart(1);
+    setQuantity(1);
+    router.push("/cart");
   };
 
   const submitRequest = async () => {
@@ -405,12 +435,20 @@ export default function PerfumePage({ params }: { params: Promise<{ id: string }
               <ShoppingBag size={18} /> Request Perfume
             </Link>
           ) : selectedPrice?.available ? (
-            <button
-              onClick={handleAddToCart}
-              className="w-full flex items-center justify-center gap-3 bg-[var(--gold)] text-black py-4 text-xs uppercase tracking-wider font-medium hover:bg-[var(--gold-light)] transition-colors"
-            >
-              <ShoppingBag size={18} /> Add to Cart
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={handleAddToCart}
+                className="flex-1 flex items-center justify-center gap-2 border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-primary)] py-4 text-xs uppercase tracking-wider font-medium hover:border-[var(--gold)] hover:bg-[var(--bg-elevated)] transition-all rounded"
+              >
+                <ShoppingBag size={16} /> Add to Cart
+              </button>
+              <button
+                onClick={handleOrderNow}
+                className="flex-1 flex items-center justify-center gap-2 bg-[var(--gold)] text-black py-4 text-xs uppercase tracking-wider font-medium hover:bg-[var(--gold-light)] transition-all rounded shadow-[0_4px_16px_var(--gold-glow)]"
+              >
+                <Zap size={16} /> Order Now
+              </button>
+            </div>
           ) : (
             <div className="space-y-3">
               <div className="w-full py-4 text-center bg-[var(--bg-surface)] border border-[var(--border)] text-[var(--text-muted)] text-xs uppercase tracking-wider">
