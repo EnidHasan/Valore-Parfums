@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, Suspense } from "react";
 import { useAuth } from "@/store/auth";
 import { toast } from "@/components/ui/Toaster";
 import { Send, Package, FlaskConical } from "lucide-react";
@@ -23,7 +23,7 @@ interface UserRequest {
 
 const mlOptions = [3, 6, 10, 15];
 
-export default function RequestsPage() {
+function RequestsPageContent() {
   const { user, loading: authLoading } = useAuth();
   const searchParams = useSearchParams();
   const requestDefaults = useMemo(() => {
@@ -379,4 +379,19 @@ export default function RequestsPage() {
       </div>
     </div>
   );
-}
+  }
+
+  export default function RequestsPage() {
+    return (
+      <Suspense fallback={
+        <div className="px-[5%] py-20">
+          <div className="max-w-2xl mx-auto space-y-4">
+            <div className="skeleton h-10 w-48 rounded" />
+            <div className="skeleton h-40 rounded" />
+          </div>
+        </div>
+      }>
+        <RequestsPageContent />
+      </Suspense>
+    );
+  }

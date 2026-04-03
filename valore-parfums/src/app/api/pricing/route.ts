@@ -79,7 +79,7 @@ async function getPricingConfig() {
 }
 
 /** Invalidate the config cache (called when admin updates settings/sizes/bottles/bulk rules) */
-export function invalidatePricingCache() { configCache = null; }
+function invalidatePricingCache() { configCache = null; }
 
 // Get prices for a specific perfume across all enabled decant sizes
 export async function GET(req: Request) {
