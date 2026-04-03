@@ -226,8 +226,8 @@ export function generateOrderConfirmationEmail(orderData: {
       <h2 style="font-family:'Cormorant Garamond',serif; font-size:32px; font-weight:400; color:#111; margin-bottom:24px; line-height:1.3;">Your Order<br><em>Has Been Received</em></h2>
       <p style="font-family:'Montserrat',sans-serif; font-size:13px; color:#444; line-height:1.9; margin-bottom:20px;">Dear <strong>${orderData.customerName}</strong>,</p>
       <p style="font-family:'Montserrat',sans-serif; font-size:13px; color:#555; line-height:1.9; margin-bottom:28px;">We are honoured to receive your order. Every fragrance at Valore Parfums is treated as an art form and yours is now in the hands of our atelier team, who will ensure it reaches you in perfect condition.</p>
-      <div style="border-left: 2px solid #c9a96e; padding: 16px 20px; background:#fff; margin-bottom:28px;">
-        <p style="font-family:'Montserrat',sans-serif; font-size:10px; letter-spacing:3px; color:#c9a96e; text-transform:uppercase; margin-bottom:10px;">Order Reference</p>
+      <div style="border-left: 2px solid #c9a96e; padding: 16px 20px; background:#fff; margin-bottom:28px; color:#8B7500;">
+        <p style="font-family:'Montserrat',sans-serif; font-size:10px; letter-spacing:3px; color:#8B7500; text-transform:uppercase; margin-bottom:10px;">Order Reference</p>
         <p style="font-family:'Cormorant Garamond',serif; font-size:22px; color:#8B7500; font-weight:500;">#${orderData.orderId}</p>
       </div>
       ${orderedItemsBlock}
@@ -375,8 +375,8 @@ export function generateOrderCancelledEmail(orderData: {
       <p style="font-family:'Montserrat',sans-serif; font-size:13px; color:#444; line-height:1.9; margin-bottom:20px;">Dear <strong>${orderData.customerName}</strong>,</p>
       <p style="font-family:'Montserrat',sans-serif; font-size:13px; color:#555; line-height:1.9; margin-bottom:28px;">We regret to inform you that Order <strong>#${orderData.orderId}</strong> has been cancelled. We understand this may be disappointing, and we sincerely apologise for any inconvenience this may have caused.</p>
 
-      <div style="border-left: 2px solid #9e6e6e; padding: 16px 20px; background:#fff; margin-bottom:28px;">
-        <p style="font-family:'Montserrat',sans-serif; font-size:10px; letter-spacing:3px; color:#9e6e6e; text-transform:uppercase; margin-bottom:10px;">Order Reference</p>
+      <div style="border-left: 2px solid #9e6e6e; padding: 16px 20px; background:#fff; margin-bottom:28px; color:#8B7500;">
+        <p style="font-family:'Montserrat',sans-serif; font-size:10px; letter-spacing:3px; color:#8B7500; text-transform:uppercase; margin-bottom:10px;">Order Reference</p>
         <p style="font-family:'Cormorant Garamond',serif; font-size:22px; color:#8B7500; font-weight:500;">#${orderData.orderId}</p>
       </div>
 
