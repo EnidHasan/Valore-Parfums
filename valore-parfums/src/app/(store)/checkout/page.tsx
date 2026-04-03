@@ -838,7 +838,7 @@ function CheckoutContent() {
 
             <section
               ref={(el) => {
-                sectionRefs.current.address = el;
+                sectionRefs.current.address = el as HTMLDivElement | null;
               }}
               className="scroll-mt-24 rounded-2xl border border-[#d7e4f2] bg-[#f2f8fd] p-4 sm:p-5 dark:border-gray-700/80 dark:bg-[var(--bg-card)]"
             >
@@ -1018,7 +1018,7 @@ function CheckoutContent() {
 
             <section
               ref={(el) => {
-                sectionRefs.current.payment = el;
+                sectionRefs.current.payment = el as HTMLDivElement | null;
               }}
               className="scroll-mt-24 rounded-2xl border border-[#e4d9f1] bg-[#f8f3fc] p-4 sm:p-5 dark:border-gray-700/80 dark:bg-[var(--bg-card)]"
             >
@@ -1326,7 +1326,7 @@ function CheckoutContent() {
 
             <section
               ref={(el) => {
-                sectionRefs.current.summary = el;
+                sectionRefs.current.summary = el as HTMLDivElement | null;
               }}
               className="scroll-mt-24 rounded-2xl border border-[#d7dde8] bg-[#f4f6fa] p-4 dark:border-gray-700/80 dark:bg-[var(--bg-card)] lg:hidden"
             >
@@ -1350,7 +1350,7 @@ function CheckoutContent() {
 
           <aside
             ref={(el) => {
-              sectionRefs.current.summary = el;
+              sectionRefs.current.summary = el as HTMLDivElement | null;
             }}
             className="hidden lg:col-span-2 lg:block lg:self-start"
           >
