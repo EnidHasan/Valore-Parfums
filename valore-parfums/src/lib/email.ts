@@ -228,7 +228,7 @@ export function generateOrderConfirmationEmail(orderData: {
       <p style="font-family:'Montserrat',sans-serif; font-size:13px; color:#555; line-height:1.9; margin-bottom:28px;">We are honoured to receive your order. Every fragrance at Valore Parfums is treated as an art form and yours is now in the hands of our atelier team, who will ensure it reaches you in perfect condition.</p>
       <div style="border-left: 2px solid #c9a96e; padding: 16px 20px; background:#fff; margin-bottom:28px;">
         <p style="font-family:'Montserrat',sans-serif; font-size:10px; letter-spacing:3px; color:#c9a96e; text-transform:uppercase; margin-bottom:10px;">Order Reference</p>
-        <p style="font-family:'Cormorant Garamond',serif; font-size:22px; color:#111; font-weight:500;">#${orderData.orderId}</p>
+        <p style="font-family:'Cormorant Garamond',serif; font-size:22px; color:#8B7500; font-weight:500;">#${orderData.orderId}</p>
       </div>
       ${orderedItemsBlock}
       <p style="font-family:'Montserrat',sans-serif; font-size:12px; color:#888; line-height:1.9;">You will receive a notification at each stage of your order's journey. Should you have any questions, our client services team is at your disposal.</p>
@@ -377,7 +377,7 @@ export function generateOrderCancelledEmail(orderData: {
 
       <div style="border-left: 2px solid #9e6e6e; padding: 16px 20px; background:#fff; margin-bottom:28px;">
         <p style="font-family:'Montserrat',sans-serif; font-size:10px; letter-spacing:3px; color:#9e6e6e; text-transform:uppercase; margin-bottom:10px;">Order Reference</p>
-        <p style="font-family:'Cormorant Garamond',serif; font-size:22px; color:#111; font-weight:500;">#${orderData.orderId}</p>
+        <p style="font-family:'Cormorant Garamond',serif; font-size:22px; color:#8B7500; font-weight:500;">#${orderData.orderId}</p>
       </div>
 
       ${cancelledItemsBlock}
