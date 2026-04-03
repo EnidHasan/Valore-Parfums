@@ -532,7 +532,7 @@ function CheckoutContent() {
     setErrors(newErrors);
 
     if (Object.keys(newErrors).length > 0) {
-      toast("Please complete all required fields", "warning");
+      toast("Please complete all required fields", "info");
       scrollToError(Object.keys(newErrors)[0]);
       return;
     }
