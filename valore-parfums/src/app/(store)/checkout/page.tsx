@@ -763,7 +763,7 @@ function CheckoutContent() {
           <div className="space-y-4 lg:col-span-3">
             <section
               ref={(el) => {
-                sectionRefs.current.customer = el;
+                sectionRefs.current.customer = el as HTMLDivElement | null;
               }}
               className="scroll-mt-24 rounded-2xl border border-[#eadfc8] bg-[#fdf9f1] p-4 sm:p-5 dark:border-gray-700/80 dark:bg-[var(--bg-card)]"
             >
