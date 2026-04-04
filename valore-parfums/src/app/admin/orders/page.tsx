@@ -19,6 +19,7 @@ interface OrderItem {
 
 interface Order {
   id: string;
+  orderSource?: "standard_order" | "customer_request" | "stock_request";
   customerName: string;
   customerPhone: string;
   customerEmail: string;
@@ -106,6 +107,7 @@ const cancellationReasonOptions = [
 ];
 type SizeTypeFilter = "all" | "decant" | "full-bottle" | "mixed";
 type SortType = "newest" | "oldest" | "highest-total" | "highest-profit";
+type SourceFilter = "all" | "standard_order" | "customer_request" | "stock_request";
 type AdminTab = "orders" | "requests" | "procurement";
 type StatusChangeKind = "order" | "request" | "procurement";
 
@@ -142,6 +144,32 @@ const hasPendingVoucherForFullBottle = (order: Order) => {
   return (order.items || []).some((item) => Boolean(item.isFullBottle) && Number(item.unitPrice ?? 0) <= 0);
 };
 
+const getOrderSource = (order: Order): SourceFilter => {
+  const source = String(order.orderSource || "standard_order") as SourceFilter;
+  if (source === "customer_request" || source === "stock_request") return source;
+  return "standard_order";
+};
+
+const getOrderSourceLabel = (source: SourceFilter) => {
+  if (source === "customer_request") return "Request";
+  if (source === "stock_request") return "Stock Request";
+  return "Order";
+};
+
+const getEntryKind = (order: Order): StatusChangeKind => {
+  const source = getOrderSource(order);
+  if (source === "customer_request") return "request";
+  if (source === "stock_request") return "procurement";
+  return "order";
+};
+
+const getStatusOptionsForOrder = (order: Order): string[] => {
+  const kind = getEntryKind(order);
+  if (kind === "request") return requestStatuses;
+  if (kind === "procurement") return procurementStatuses;
+  return statuses;
+};
+
 const normalizeRequestStatus = (status?: string) => {
   if (!status) return "Pending";
   if (status === "Approved") return "Confirmed";
@@ -166,6 +194,7 @@ export default function OrdersPage() {
   const [activeTab, setActiveTab] = useState<AdminTab>("orders");
   const [statusFilter, setStatusFilter] = useState("");
   const [sizeTypeFilter, setSizeTypeFilter] = useState<SizeTypeFilter>("all");
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [paymentMethodFilter, setPaymentMethodFilter] = useState<"all" | "Cash on Delivery" | "Bkash Manual" | "Bank Manual">("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -508,8 +537,11 @@ export default function OrdersPage() {
     const byPaymentMethod = paymentMethodFilter === "all"
       ? bySize
       : bySize.filter((o) => (o.paymentMethod || "Cash on Delivery") === paymentMethodFilter);
+    const bySource = sourceFilter === "all"
+      ? byPaymentMethod
+      : byPaymentMethod.filter((o) => getOrderSource(o) === sourceFilter);
 
-    const byDateRange = byPaymentMethod.filter((o) => {
+    const byDateRange = bySource.filter((o) => {
       if (!dateFrom && !dateTo) return true;
       const createdAt = new Date(o.createdAt);
       if (Number.isNaN(createdAt.getTime())) return false;
@@ -531,7 +563,7 @@ export default function OrdersPage() {
     });
 
     return sorted;
-  }, [orders, statusFilter, sizeTypeFilter, paymentMethodFilter, dateFrom, dateTo, sortBy]);
+  }, [orders, statusFilter, sizeTypeFilter, sourceFilter, paymentMethodFilter, dateFrom, dateTo, sortBy]);
 
   const openOrderDetails = (order: Order) => {
     setSelectedOrder(order);
@@ -574,8 +606,6 @@ export default function OrdersPage() {
       <div className="flex items-center gap-2 flex-wrap">
         {[
           { key: "orders", label: "Orders" },
-          { key: "requests", label: "Customer Requests" },
-          { key: "procurement", label: "Procurement" },
         ].map((tab) => (
           <button
             key={tab.key}
@@ -665,6 +695,29 @@ export default function OrdersPage() {
               className="bg-[var(--bg-input)] border border-[var(--border)] rounded px-2 py-1 text-xs focus:border-[var(--gold)] outline-none"
             />
           </div>
+
+          {[
+            { key: "all", label: "All Sources" },
+            { key: "standard_order", label: "Orders" },
+            { key: "customer_request", label: "Requests" },
+            { key: "stock_request", label: "Stock Requests" },
+          ].map((entry) => {
+            const key = entry.key as SourceFilter;
+            const count = key === "all" ? orders.length : orders.filter((o) => getOrderSource(o) === key).length;
+            return (
+              <button
+                key={key}
+                onClick={() => setSourceFilter(key)}
+                className={`px-3 py-1.5 text-[10px] uppercase tracking-wider rounded transition-colors ${
+                  sourceFilter === key
+                    ? "bg-[var(--gold)] text-black"
+                    : "border border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--gold)]"
+                }`}
+              >
+                {entry.label} ({count})
+              </button>
+            );
+          })}
 
           {[
             { key: "all", label: "All Types" },
@@ -758,6 +811,9 @@ export default function OrdersPage() {
                     <div className="bg-[var(--bg-card)] rounded p-3 border border-[var(--border)]">
                       <p className="text-[10px] uppercase tracking-[0.2em] text-[var(--text-muted)] mb-1">Type</p>
                       <div className="flex flex-col items-start gap-1">
+                        <span className="text-[10px] uppercase tracking-wider px-2 py-1 rounded-full border border-[var(--border-gold)] text-[var(--gold)] bg-[var(--gold-tint)]">
+                          {getOrderSourceLabel(getOrderSource(o))}
+                        </span>
                         <span className={`text-[10px] uppercase tracking-wider px-2 py-1 rounded-full ${orderTypeClass}`}>
                           {orderTypeLabel}
                         </span>
@@ -801,15 +857,15 @@ export default function OrdersPage() {
                       value={currentStatus}
                       onChange={(e) => queueStatusChange({
                         id: o.id,
-                        kind: "order",
+                        kind: getEntryKind(o),
                         targetName: o.customerName,
                         fromStatus: currentStatus,
                         toStatus: e.target.value,
                       })}
                       className="bg-[var(--bg-input)] border border-[var(--border)] rounded px-2 py-2 text-xs focus:border-[var(--gold)] outline-none"
                     >
-                      {statuses.map((s) => (
-                        <option key={s} value={s}>{getOrderStatusLabel(s)}</option>
+                      {getStatusOptionsForOrder(o).map((s) => (
+                        <option key={s} value={s}>{s}</option>
                       ))}
                     </select>
                   </div>
@@ -868,6 +924,9 @@ export default function OrdersPage() {
                       </td>
                       <td className="py-3 px-4 text-center">
                         <div className="flex flex-col items-center gap-1">
+                          <span className="text-[10px] uppercase tracking-wider px-2 py-1 rounded-full border border-[var(--border-gold)] text-[var(--gold)] bg-[var(--gold-tint)]">
+                            {getOrderSourceLabel(getOrderSource(o))}
+                          </span>
                           <span className={`text-[10px] uppercase tracking-wider px-2 py-1 rounded-full ${orderTypeClass}`}>
                             {orderTypeLabel}
                           </span>
@@ -896,15 +955,15 @@ export default function OrdersPage() {
                           value={currentStatus}
                           onChange={(e) => queueStatusChange({
                             id: o.id,
-                            kind: "order",
+                            kind: getEntryKind(o),
                             targetName: o.customerName,
                             fromStatus: currentStatus,
                             toStatus: e.target.value,
                           })}
                           className="bg-[var(--bg-input)] border border-[var(--border)] rounded px-2 py-1 text-xs focus:border-[var(--gold)] outline-none"
                         >
-                          {statuses.map((s) => (
-                            <option key={s} value={s}>{getOrderStatusLabel(s)}</option>
+                          {getStatusOptionsForOrder(o).map((s) => (
+                            <option key={s} value={s}>{s}</option>
                           ))}
                         </select>
                       </td>

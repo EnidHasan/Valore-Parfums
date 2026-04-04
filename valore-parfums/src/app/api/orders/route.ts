@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { db, Collections, serializeDoc } from "@/lib/prisma";
-import { calculateSellingPrice, getBrandTier, getTierProfitMargin, parseTierMargins, splitProfit, normalizeOrderImagePath } from "@/lib/utils";
+import { calculateSellingPrice, getBrandTier, getTierProfitMargin, parseTierMargins, normalizeOrderImagePath } from "@/lib/utils";
 import type { OwnerType } from "@/lib/utils";
 import { v4 as uuid } from "uuid";
 import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import { getSessionUser, requireAdmin } from "@/lib/auth";
 import { validateBatch, validateEmail, validateOrderData, validateString } from "@/lib/validation";
 import { generateOrderConfirmationEmail, sendEmail } from "@/lib/email";
+import { buildOrderPricingSnapshot, computeItemBreakdown, distributeOrderProfit, fromMinorUnits, splitProfitMinor, toMinorUnits } from "@/lib/finance";
 
 async function notifyAdminViaWebhook(payload: {
   title: string;
@@ -65,6 +66,8 @@ export async function GET(req: Request) {
     });
     const normalized = allOrders.map((o) => serializeDoc({
       ...o,
+      entryType: o.entryType || (o.orderSource === "customer_request" || o.orderSource === "stock_request" ? "request" : "order"),
+      orderSource: o.orderSource || "standard_order",
       status: o.status || "Pending",
       totalAmount: o.totalAmount ?? o.subtotal ?? 0,
       finalAmount: o.finalAmount ?? o.total ?? 0,
@@ -77,10 +80,16 @@ export async function GET(req: Request) {
   if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   // Fetch orders and all items in parallel (avoids N+1 subcollection reads)
-  const [ordersSnap, allItemsSnap] = await Promise.all([
+  const [ordersSnap, allItemsSnap, requestsSnap] = await Promise.all([
     db.collection(Collections.orders).get(),
     db.collectionGroup("items").get(),
+    db.collection(Collections.requests).get(),
   ]);
+
+  const requestsById = new Map<string, Record<string, unknown>>();
+  for (const requestDoc of requestsSnap.docs) {
+    requestsById.set(requestDoc.id, requestDoc.data() as Record<string, unknown>);
+  }
 
   // Build items map keyed by parent order ID
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -94,11 +103,22 @@ export async function GET(req: Request) {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let allOrders: any[] = ordersSnap.docs.map((doc) => ({
-    id: doc.id,
-    ...doc.data(),
-    items: itemsByOrder.get(doc.id) || [],
-  }));
+  let allOrders: any[] = ordersSnap.docs.map((doc) => {
+    const data = doc.data();
+    const source = String(data.orderSource || "standard_order");
+    const linkedRequest = source === "customer_request" ? (requestsById.get(doc.id) || {}) : {};
+    return {
+      id: doc.id,
+      ...data,
+      ...(source === "customer_request" ? {
+        requestMeta: linkedRequest,
+        requestType: linkedRequest.type || data.requestType || "decant",
+        requestStatus: linkedRequest.status || data.status || "Pending",
+        requestNotes: linkedRequest.notes || "",
+      } : {}),
+      items: itemsByOrder.get(doc.id) || [],
+    };
+  });
 
   if (status) {
     allOrders = allOrders.filter((o) => o.status === status);
@@ -111,6 +131,8 @@ export async function GET(req: Request) {
 
   const normalized = allOrders.map((o) => serializeDoc({
     ...o,
+    entryType: o.entryType || (o.orderSource === "customer_request" || o.orderSource === "stock_request" ? "request" : "order"),
+    orderSource: o.orderSource || "standard_order",
     status: o.status || "Pending",
     totalAmount: o.totalAmount ?? o.subtotal ?? 0,
     finalAmount: o.finalAmount ?? o.total ?? 0,
@@ -186,7 +208,6 @@ export async function POST(req: Request) {
       }
     }
 
-    let subtotal = 0;
     const orderCountByPerfume = new Map<string, number>();
     const orderItems: {
     perfumeId: string;
@@ -202,6 +223,23 @@ export async function POST(req: Request) {
     ownerName: string;
     ownerProfit: number;
     otherOwnerProfit: number;
+    financialBreakdown: {
+      unitCostMinor: number;
+      unitSellingPriceMinor: number;
+      quantity: number;
+      totalCostMinor: number;
+      totalRevenueMinor: number;
+      computedProfitMinor: number;
+    };
+    pricingSnapshot: {
+      costPricePerMl: number;
+      marketPricePerMl: number;
+      bottleCost: number;
+      packagingCost: number;
+      appliedMarginPercent: number;
+      discountPercent: number;
+      pricingTier: string;
+    };
     }[] = [];
 
     // Fetch settings (replaces prisma.settings.findUnique)
@@ -216,6 +254,9 @@ export async function POST(req: Request) {
       ? (deliveryZone === "Outside Dhaka" ? deliveryFeeOutsideDhaka : deliveryFeeInsideDhaka)
       : 0;
     const margins = parseTierMargins(settings?.tierMargins);
+    const owner1Name = String(settings?.owner1Name || "Tayeb");
+    const owner2Name = String(settings?.owner2Name || "Enid");
+    const owner1Share = Number(settings?.owner1Share ?? 60);
 
     const normalizedBkashPayment = {
       customerName: String(bkashPayment?.customerName || "").trim(),
@@ -334,22 +375,27 @@ export async function POST(req: Request) {
 
     // Apply bulk discount if applicable
     const bulkRule = bulkRules.find((r: { minQuantity: number }) => quantity >= r.minQuantity);
+    const discountPercent = bulkRule ? Number(bulkRule.discountPercent || 0) : 0;
     if (bulkRule) {
-      unitPrice = Math.ceil(unitPrice * (1 - bulkRule.discountPercent / 100));
+      unitPrice = Math.ceil(unitPrice * (1 - discountPercent / 100));
     }
 
-    const totalPrice = unitPrice * quantity;
-    const costPrice = isFullBottleItem
+    const unitCost = isFullBottleItem
       ? 0
-      : ((perfume.purchasePricePerMl || 0) * requestedFullBottleMl + bottleCost + packagingCost) * quantity;
-    const itemProfit = totalPrice - costPrice;
+      : ((perfume.purchasePricePerMl || 0) * requestedFullBottleMl + bottleCost + packagingCost);
+    const itemBreakdown = computeItemBreakdown({
+      unitCostMinor: toMinorUnits(unitCost),
+      unitSellingPriceMinor: toMinorUnits(unitPrice),
+      quantity,
+    });
+    const totalPrice = fromMinorUnits(itemBreakdown.totalRevenueMinor);
+    const costPrice = fromMinorUnits(itemBreakdown.totalCostMinor);
+    const itemProfitMinor = itemBreakdown.computedProfitMinor;
     const owner = (perfume.owner || "Store") as OwnerType;
     const ownerProfitPercent = settings?.ownerProfitPercent ?? 85;
-    const { ownerProfit, otherOwnerProfit } = splitProfit(itemProfit, owner, ownerProfitPercent);
-
-    if (!isFullBottleItem) {
-      subtotal += totalPrice;
-    }
+    const { ownerProfitMinor, otherOwnerProfitMinor } = splitProfitMinor(itemProfitMinor, ownerProfitPercent);
+    const ownerProfit = owner === "Store" ? 0 : fromMinorUnits(ownerProfitMinor);
+    const otherOwnerProfit = owner === "Store" ? 0 : fromMinorUnits(otherOwnerProfitMinor);
 
     // Deduct stock (replaces prisma.perfume.update with decrement)
     if (!isFullBottleItem) {
@@ -379,6 +425,16 @@ export async function POST(req: Request) {
         ownerName: owner,
         ownerProfit,
         otherOwnerProfit,
+        financialBreakdown: itemBreakdown,
+        pricingSnapshot: {
+          costPricePerMl: Number(perfume.purchasePricePerMl || 0),
+          marketPricePerMl: Number(effectiveMarketPricePerMl || 0),
+          bottleCost: Number(bottleCost || 0),
+          packagingCost: Number(packagingCost || 0),
+          appliedMarginPercent: Number(profitMargin || 0),
+          discountPercent,
+          pricingTier: tier,
+        },
       });
 
       orderCountByPerfume.set(perfumeId, (orderCountByPerfume.get(perfumeId) || 0) + quantity);
@@ -389,7 +445,8 @@ export async function POST(req: Request) {
     }
 
     // Apply voucher (replaces prisma.voucher.findUnique + update)
-    let discount = 0;
+    let discountMinor = 0;
+    const subtotalMinor = orderItems.reduce((sum, item) => sum + item.financialBreakdown.totalRevenueMinor, 0);
     if (voucherCode) {
     const voucherSnap = await db.collection(Collections.vouchers).where("code", "==", voucherCode).limit(1).get();
     if (!voucherSnap.empty) {
@@ -398,9 +455,9 @@ export async function POST(req: Request) {
       const voucher = voucherDoc.data() as any;
       if (voucher.isActive) {
         if (voucher.discountType === "percentage") {
-          discount = Math.round((subtotal * voucher.discountValue) / 100);
+          discountMinor = Math.round(subtotalMinor * (Number(voucher.discountValue || 0) / 100));
         } else {
-          discount = voucher.discountValue;
+          discountMinor = toMinorUnits(Number(voucher.discountValue || 0));
         }
         // Increment usage count
         await db.collection(Collections.vouchers).doc(voucherDoc.id).update({
@@ -410,15 +467,37 @@ export async function POST(req: Request) {
     }
   }
 
-    const total = Math.max(0, subtotal - discount) + (isDelivery ? deliveryFee : 0);
-    const totalCost = orderItems.reduce((s, i) => s + i.costPrice, 0);
-    const profit = (total - (isDelivery ? deliveryFee : 0)) - totalCost;
+    discountMinor = Math.max(0, Math.min(discountMinor, subtotalMinor));
+    const deliveryFeeMinor = toMinorUnits(isDelivery ? deliveryFee : 0);
+    const totalCostMinor = orderItems.reduce((sum, item) => sum + item.financialBreakdown.totalCostMinor, 0);
+    const pricingSnapshot = buildOrderPricingSnapshot({
+      subtotalMinor,
+      discountMinor,
+      deliveryFeeMinor,
+      totalCostMinor,
+    });
+    const subtotal = fromMinorUnits(pricingSnapshot.subtotalMinor);
+    const discount = fromMinorUnits(pricingSnapshot.discountMinor);
+    const total = fromMinorUnits(pricingSnapshot.totalMinor);
+    const profit = fromMinorUnits(pricingSnapshot.totalProfitMinor);
+    const profitDistribution = distributeOrderProfit({
+      items: orderItems.map((item) => ({
+        ownerName: item.ownerName,
+        computedProfitMinor: item.financialBreakdown.computedProfitMinor,
+        ownerProfitMinor: item.ownerName === "Store" ? 0 : toMinorUnits(item.ownerProfit),
+        otherOwnerProfitMinor: item.ownerName === "Store" ? 0 : toMinorUnits(item.otherOwnerProfit),
+      })),
+      owner1Name,
+      owner2Name,
+      owner1Share,
+    });
 
     // Create order document (replaces prisma.order.create)
     const orderId = uuid();
     const now = Timestamp.now();
     const orderDoc = {
     ...orderData,
+    entryType: "order",
     userId: sessionUser?.id ?? null,
     isGuestOrder: !sessionUser,
     customerEmail: orderData.customerEmail || sessionUser?.email || "",
@@ -450,6 +529,20 @@ export async function POST(req: Request) {
     subtotal,
     total,
     profit,
+    pricingSnapshot: {
+      ...pricingSnapshot,
+      generatedAt: now,
+    },
+    financialsMinor: {
+      subtotalMinor: pricingSnapshot.subtotalMinor,
+      discountMinor: pricingSnapshot.discountMinor,
+      deliveryFeeMinor: pricingSnapshot.deliveryFeeMinor,
+      totalMinor: pricingSnapshot.totalMinor,
+      totalCostMinor: pricingSnapshot.totalCostMinor,
+      totalProfitMinor: pricingSnapshot.totalProfitMinor,
+    },
+    profitDistribution,
+    financialsLocked: false,
     createdAt: now,
     updatedAt: now,
     };

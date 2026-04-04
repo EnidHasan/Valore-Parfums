@@ -56,6 +56,7 @@ export async function POST(req: Request) {
   };
 
   const orderData = {
+    entryType: "request",
     customerName: String(body.customerName || "").slice(0, 200),
     customerPhone: String(body.customerPhone || "").slice(0, 50),
     customerEmail: String(body.customerEmail || "").slice(0, 200),

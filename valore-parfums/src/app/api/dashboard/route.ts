@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db, Collections, serializeDoc } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth";
+import { fromMinorUnits, toMinorUnits } from "@/lib/finance";
 
 // Helper: convert Firestore Timestamp to Date
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -79,20 +80,22 @@ export async function GET() {
   const pendingBkashVerifications = allOrders.filter((o) => o.status === "Pending Bkash Verification").length;
   const pendingBankVerifications = allOrders.filter((o) => o.status === "Pending Bank Verification").length;
   const completedOrderList = normalizedOrders.filter((o) => o.normalizedStatus === "Dispatched");
-  const totalRevenue = completedOrderList.reduce((s, o) => s + (o.total ?? 0), 0);
-  const totalProfitVal = completedOrderList.reduce((s, o) => s + (o.profit ?? 0), 0);
+  const totalRevenueMinor = completedOrderList.reduce((s, o) => s + Number(o?.financialsMinor?.totalMinor ?? toMinorUnits(o.total ?? 0)), 0);
+  const totalProfitMinor = completedOrderList.reduce((s, o) => s + Number(o?.financialsMinor?.totalProfitMinor ?? toMinorUnits(o.profit ?? 0)), 0);
+  const totalRevenue = fromMinorUnits(totalRevenueMinor);
+  const totalProfitVal = fromMinorUnits(totalProfitMinor);
 
   // Today aggregates
   const todayOrdersNonCancelled = normalizedOrders.filter((o) => toDate(o.createdAt) >= startOfDay && o.normalizedStatus !== "Cancelled");
   const todayCompleted = normalizedOrders.filter((o) => toDate(o.createdAt) >= startOfDay && o.normalizedStatus === "Dispatched");
   const todayOrders = todayOrdersNonCancelled.length;
-  const todayRevenue = todayCompleted.reduce((s, o) => s + (o.total ?? 0), 0);
-  const todayProfitVal = todayCompleted.reduce((s, o) => s + (o.profit ?? 0), 0);
+  const todayRevenue = fromMinorUnits(todayCompleted.reduce((s, o) => s + Number(o?.financialsMinor?.totalMinor ?? toMinorUnits(o.total ?? 0)), 0));
+  const todayProfitVal = fromMinorUnits(todayCompleted.reduce((s, o) => s + Number(o?.financialsMinor?.totalProfitMinor ?? toMinorUnits(o.profit ?? 0)), 0));
 
   // Month aggregates
   const monthCompleted = normalizedOrders.filter((o) => toDate(o.createdAt) >= startOfMonth && o.normalizedStatus === "Dispatched");
-  const monthRevenue = monthCompleted.reduce((s, o) => s + (o.total ?? 0), 0);
-  const monthProfitVal = monthCompleted.reduce((s, o) => s + (o.profit ?? 0), 0);
+  const monthRevenue = fromMinorUnits(monthCompleted.reduce((s, o) => s + Number(o?.financialsMinor?.totalMinor ?? toMinorUnits(o.total ?? 0)), 0));
+  const monthProfitVal = fromMinorUnits(monthCompleted.reduce((s, o) => s + Number(o?.financialsMinor?.totalProfitMinor ?? toMinorUnits(o.profit ?? 0)), 0));
 
   // Low stock perfumes (replaces prisma.perfume.findMany take 10 + filter)
   const lowStockMl = settings?.lowStockAlertMl ?? 20;
@@ -148,8 +151,8 @@ export async function GET() {
     });
     dailySales.push({
       date: dayStart.toISOString().split("T")[0],
-      revenue: dayCompleted.reduce((s, o) => s + (o.total ?? 0), 0),
-      profit: dayCompleted.reduce((s, o) => s + (o.profit ?? 0), 0),
+      revenue: fromMinorUnits(dayCompleted.reduce((s, o) => s + Number(o?.financialsMinor?.totalMinor ?? toMinorUnits(o.total ?? 0)), 0)),
+      profit: fromMinorUnits(dayCompleted.reduce((s, o) => s + Number(o?.financialsMinor?.totalProfitMinor ?? toMinorUnits(o.profit ?? 0)), 0)),
       orders: dayCompleted.length,
     });
   }
@@ -165,8 +168,8 @@ export async function GET() {
     });
     monthlySales.push({
       month: mStart.toLocaleString("default", { month: "short", year: "2-digit" }),
-      revenue: mCompleted.reduce((s, o) => s + (o.total ?? 0), 0),
-      profit: mCompleted.reduce((s, o) => s + (o.profit ?? 0), 0),
+      revenue: fromMinorUnits(mCompleted.reduce((s, o) => s + Number(o?.financialsMinor?.totalMinor ?? toMinorUnits(o.total ?? 0)), 0)),
+      profit: fromMinorUnits(mCompleted.reduce((s, o) => s + Number(o?.financialsMinor?.totalProfitMinor ?? toMinorUnits(o.profit ?? 0)), 0)),
       orders: mCompleted.length,
     });
   }

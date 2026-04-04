@@ -3,6 +3,7 @@ import { db, Collections, serializeDoc } from "@/lib/prisma";
 import { v4 as uuid } from "uuid";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { requireAdmin } from "@/lib/auth";
+import { toMinorUnits, fromMinorUnits } from "@/lib/finance";
 
 function mapRequestStatusToOrderStatus(status: string): string {
   if (status === "Approved") return "Confirmed";
@@ -37,11 +38,13 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const bp = Number(body.buyingPrice);
     if (isNaN(bp) || bp < 0) return NextResponse.json({ error: "Invalid buying price" }, { status: 400 });
     updates.buyingPrice = bp;
+    updates.buyingPriceMinor = toMinorUnits(bp);
   }
   if (body.sellingPrice !== undefined) {
     const sp = Number(body.sellingPrice);
     if (isNaN(sp) || sp < 0) return NextResponse.json({ error: "Invalid selling price" }, { status: 400 });
     updates.sellingPrice = sp;
+    updates.sellingPriceMinor = toMinorUnits(sp);
   }
 
   // When marking as fulfilled, calculate profit and distribute to owners.
@@ -61,12 +64,16 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       );
     }
 
-    const profit = Number(sellingPrice) - Number(buyingPrice);
+    const buyingPriceMinor = toMinorUnits(Number(buyingPrice));
+    const sellingPriceMinor = toMinorUnits(Number(sellingPrice));
+    const profitMinor = sellingPriceMinor - buyingPriceMinor;
+    const profit = fromMinorUnits(profitMinor);
     updates.profit = profit;
+    updates.profitMinor = profitMinor;
     updates.fulfilledAt = Timestamp.now();
 
     // Distribute profit to owner accounts based on configured split
-    if (profit > 0) {
+    if (profitMinor > 0) {
       const settingsDoc = await db.collection(Collections.settings).doc("default").get();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const settings = settingsDoc.exists ? (settingsDoc.data() as any) : null;
@@ -75,8 +82,20 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       const owner1Share = settings?.owner1Share ?? 60;
       const owner2Share = settings?.owner2Share ?? 40;
 
-      const owner1Amount = Math.round((profit * owner1Share) / 100);
-      const owner2Amount = profit - owner1Amount; // remainder to avoid rounding loss
+      const owner1AmountMinor = Math.round(profitMinor * (owner1Share / 100));
+      const owner2AmountMinor = profitMinor - owner1AmountMinor;
+      const owner1Amount = fromMinorUnits(owner1AmountMinor);
+      const owner2Amount = fromMinorUnits(owner2AmountMinor);
+
+      updates.profitDistribution = [
+        { ownerId: owner1Name, percentage: owner1Share, profitAmountMinor: owner1AmountMinor },
+        { ownerId: owner2Name, percentage: owner2Share, profitAmountMinor: owner2AmountMinor },
+      ];
+      updates.financialSnapshot = {
+        buyingPriceMinor,
+        sellingPriceMinor,
+        profitMinor,
+      };
 
       const now = Timestamp.now();
 
@@ -101,6 +120,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         ownerName: owner1Name,
         type: "request_profit",
         amount: owner1Amount,
+        amountMinor: owner1AmountMinor,
         description: `Request fulfilled: ${existingData.perfumeName} (${owner1Share}% of ${profit} BDT)`,
         createdAt: now,
       });
@@ -111,6 +131,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         ownerName: owner2Name,
         type: "request_profit",
         amount: owner2Amount,
+        amountMinor: owner2AmountMinor,
         description: `Request fulfilled: ${existingData.perfumeName} (${owner2Share}% of ${profit} BDT)`,
         createdAt: now,
       });
@@ -123,7 +144,23 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const orderStatus = body.status ? mapRequestStatusToOrderStatus(String(body.status)) : null;
 
   if (orderStatus) {
-    await orderRef.set({ status: orderStatus, updatedAt: Timestamp.now() }, { merge: true });
+    await orderRef.set({
+      status: orderStatus,
+      updatedAt: Timestamp.now(),
+      subtotal: Number(updates.sellingPrice ?? existingData.sellingPrice ?? 0),
+      total: Number(updates.sellingPrice ?? existingData.sellingPrice ?? 0),
+      profit: Number(updates.profit ?? existingData.profit ?? 0),
+      financialsLocked: orderStatus === "Dispatched",
+      profitDistribution: updates.profitDistribution ?? existingData.profitDistribution ?? [],
+      financialsMinor: {
+        subtotalMinor: toMinorUnits(Number(updates.sellingPrice ?? existingData.sellingPrice ?? 0)),
+        discountMinor: 0,
+        deliveryFeeMinor: 0,
+        totalMinor: toMinorUnits(Number(updates.sellingPrice ?? existingData.sellingPrice ?? 0)),
+        totalCostMinor: toMinorUnits(Number(updates.buyingPrice ?? existingData.buyingPrice ?? 0)),
+        totalProfitMinor: toMinorUnits(Number(updates.profit ?? existingData.profit ?? 0)),
+      },
+    }, { merge: true });
   }
 
   await docRef.update(updates);

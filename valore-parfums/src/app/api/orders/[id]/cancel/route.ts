@@ -115,7 +115,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     // Reverse profit transactions if order was already completed
-    if (currentStatus === "Completed") {
+    if (["Completed", "Dispatched"].includes(currentStatus)) {
       const profitSnap = await db
         .collection(Collections.profitTransactions)
         .where("orderId", "==", id)

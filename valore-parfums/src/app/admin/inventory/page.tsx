@@ -479,7 +479,8 @@ export default function InventoryPage() {
       const json = await res.json().catch(() => null);
       if (!res.ok) throw new Error(json?.error || "Image upload failed");
 
-      setForm((prev) => ({ ...prev, images: JSON.stringify([json.imageUrl]) }));
+      const imageList = [json?.imageUrl, json?.fallbackUrl].filter((value): value is string => typeof value === "string" && value.length > 0);
+      setForm((prev) => ({ ...prev, images: JSON.stringify(imageList.length > 0 ? imageList : []) }));
       toast("Image uploaded and optimized", "success");
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Image upload failed";
