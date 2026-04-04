@@ -26,13 +26,35 @@ export async function GET(req: Request) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Login required" }, { status: 401 });
 
-  const snap = await db
-    .collection(Collections.requests)
-    .where("userId", "==", user.id)
-    .orderBy("createdAt", "desc")
-    .get();
+  // Query by multiple identifiers to support legacy records and avoid
+  // requiring a composite index for where+orderBy.
+  const [byUserIdSnap, byUserEmailSnap, byCustomerEmailSnap] = await Promise.all([
+    db.collection(Collections.requests).where("userId", "==", user.id).get(),
+    db.collection(Collections.requests).where("userEmail", "==", user.email).get(),
+    db.collection(Collections.requests).where("customerEmail", "==", user.email).get(),
+  ]);
 
-  const requests = snap.docs.map((doc) => serializeDoc({ id: doc.id, ...doc.data() }));
+  const requestDocsMap = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
+  for (const doc of byUserIdSnap.docs) {
+    requestDocsMap.set(doc.id, doc);
+  }
+  for (const doc of byUserEmailSnap.docs) {
+    requestDocsMap.set(doc.id, doc);
+  }
+  for (const doc of byCustomerEmailSnap.docs) {
+    requestDocsMap.set(doc.id, doc);
+  }
+
+  const requests = Array.from(requestDocsMap.values()).map((doc) => serializeDoc({ id: doc.id, ...doc.data() }));
+
+  requests.sort((a, b) => {
+    const da = (a as { createdAt?: { toDate?: () => Date } | string }).createdAt;
+    const db2 = (b as { createdAt?: { toDate?: () => Date } | string }).createdAt;
+    const aDate = typeof da === "object" && da?.toDate ? da.toDate() : new Date(da || 0);
+    const bDate = typeof db2 === "object" && db2?.toDate ? db2.toDate() : new Date(db2 || 0);
+    return bDate.getTime() - aDate.getTime();
+  });
+
   return NextResponse.json(requests);
 }
 
