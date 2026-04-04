@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/auth";
 import { v4 as uuid } from "uuid";
 import { splitProfit } from "@/lib/utils";
 import type { OwnerType } from "@/lib/utils";
+import { buildOrderPricingSnapshot, computeItemBreakdown, distributeOrderProfit, fromMinorUnits, toMinorUnits } from "@/lib/finance";
 import {
   generateOrderConfirmedEmail,
   generateOrderDeliveredEmail,
@@ -93,6 +94,11 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const owner1Share = settings?.owner1Share ?? 60;
   const owner2Share = settings?.owner2Share ?? 40;
   const ownerProfitPercent = settings?.ownerProfitPercent ?? 85;
+  const immutableFinancialStatuses = new Set(["Dispatched", "Delivered", "Cancelled"]);
+
+  if (immutableFinancialStatuses.has(previousStatus) && (Boolean(removeVoucher) || (Array.isArray(itemPriceUpdates) && itemPriceUpdates.length > 0))) {
+    return NextResponse.json({ error: `Financial fields are locked for ${previousStatus} orders` }, { status: 409 });
+  }
   const now = Timestamp.now();
 
   // Apply admin manual unit price updates for Full Bottle items, then recompute order totals/profit.
@@ -123,8 +129,14 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
         const quantity = Number(item.quantity ?? 0);
         const nextUnitPrice = updatesMap.get(itemDoc.id) ?? 0;
-        const nextTotalPrice = Math.max(0, quantity) * nextUnitPrice;
-        const costPrice = Number(item.costPrice ?? 0);
+        const unitCost = Number(item?.pricingSnapshot?.unitCost ?? item?.financialBreakdown?.unitCostMinor ? fromMinorUnits(Number(item?.financialBreakdown?.unitCostMinor || 0)) : (quantity > 0 ? Number(item.costPrice ?? 0) / quantity : 0));
+        const breakdown = computeItemBreakdown({
+          unitCostMinor: toMinorUnits(unitCost),
+          unitSellingPriceMinor: toMinorUnits(nextUnitPrice),
+          quantity,
+        });
+        const nextTotalPrice = fromMinorUnits(breakdown.totalRevenueMinor);
+        const costPrice = fromMinorUnits(breakdown.totalCostMinor);
         const itemProfit = nextTotalPrice - costPrice;
         const ownerName = (item.ownerName || "Store") as OwnerType;
         const { ownerProfit, otherOwnerProfit } = splitProfit(itemProfit, ownerName, ownerProfitPercent);
@@ -132,24 +144,37 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         await itemDoc.ref.update({
           unitPrice: nextUnitPrice,
           totalPrice: nextTotalPrice,
+          costPrice,
           ownerProfit,
           otherOwnerProfit,
+          financialBreakdown: breakdown,
+          pricingSnapshot: {
+            ...(item.pricingSnapshot || {}),
+            unitCost,
+            unitSellingPrice: nextUnitPrice,
+          },
           updatedAt: now,
         });
       }
 
       // Recompute order-level totals from all item rows after updates.
       const refreshedItemsSnap = await itemsRef.get();
-      let subtotal = 0;
-      let totalCost = 0;
+      let subtotalMinor = 0;
+      let totalCostMinor = 0;
       for (const itemDoc of refreshedItemsSnap.docs) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const item = itemDoc.data() as any;
-        subtotal += Number(item.totalPrice ?? 0);
-        totalCost += Number(item.costPrice ?? 0);
+        const itemBreakdown = item.financialBreakdown;
+        if (itemBreakdown && Number.isFinite(itemBreakdown.totalRevenueMinor) && Number.isFinite(itemBreakdown.totalCostMinor)) {
+          subtotalMinor += Number(itemBreakdown.totalRevenueMinor || 0);
+          totalCostMinor += Number(itemBreakdown.totalCostMinor || 0);
+        } else {
+          subtotalMinor += toMinorUnits(Number(item.totalPrice ?? 0));
+          totalCostMinor += toMinorUnits(Number(item.costPrice ?? 0));
+        }
       }
 
-      let discount = Boolean(removeVoucher) ? 0 : Number(order.discount ?? 0);
+      let discountMinor = Boolean(removeVoucher) ? 0 : toMinorUnits(Number(order.discount ?? 0));
       let voucherAppliedAt = Boolean(removeVoucher) ? null : (order.voucherAppliedAt ?? null);
 
       const voucherCode = Boolean(removeVoucher) ? "" : String(order.voucherCode || "").trim();
@@ -180,34 +205,56 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
             const overUsageLimit = usageLimit > 0 && currentUsedCount >= usageLimit;
 
             const minOrderValue = Number(voucher.minOrderValue ?? 0);
-            const belowMinOrderValue = minOrderValue > 0 && subtotal < minOrderValue;
+            const belowMinOrderValue = minOrderValue > 0 && subtotalMinor < toMinorUnits(minOrderValue);
 
             if (!isExpired && !overUsageLimit && !belowMinOrderValue) {
-              discount = voucher.discountType === "percentage"
-                ? Math.round((subtotal * Number(voucher.discountValue || 0)) / 100)
-                : Number(voucher.discountValue || 0);
-              discount = Math.max(0, Math.min(discount, subtotal));
+              discountMinor = voucher.discountType === "percentage"
+                ? Math.round(subtotalMinor * (Number(voucher.discountValue || 0) / 100))
+                : toMinorUnits(Number(voucher.discountValue || 0));
+              discountMinor = Math.max(0, Math.min(discountMinor, subtotalMinor));
 
-              if (!voucherAppliedAt && discount > 0) {
+              if (!voucherAppliedAt && discountMinor > 0) {
                 await db.collection(Collections.vouchers).doc(voucherSnap.docs[0].id).update({
                   usedCount: FieldValue.increment(1),
                 });
                 voucherAppliedAt = now;
               }
             } else {
-              discount = 0;
+              discountMinor = 0;
             }
           } else {
-            discount = 0;
+            discountMinor = 0;
           }
         } else {
-          discount = 0;
+          discountMinor = 0;
         }
       }
 
-      const deliveryFee = Number(order.deliveryFee ?? 0);
-      const total = Math.max(0, subtotal - discount) + deliveryFee;
-      const profit = (total - deliveryFee) - totalCost;
+      const snapshot = buildOrderPricingSnapshot({
+        subtotalMinor,
+        discountMinor,
+        deliveryFeeMinor: toMinorUnits(Number(order.deliveryFee ?? 0)),
+        totalCostMinor,
+      });
+      const subtotal = fromMinorUnits(snapshot.subtotalMinor);
+      const discount = fromMinorUnits(snapshot.discountMinor);
+      const total = fromMinorUnits(snapshot.totalMinor);
+      const profit = fromMinorUnits(snapshot.totalProfitMinor);
+      const distribution = distributeOrderProfit({
+        items: refreshedItemsSnap.docs.map((itemDoc) => {
+          const item = itemDoc.data() as Record<string, unknown>;
+          const breakdown = (item.financialBreakdown || {}) as { computedProfitMinor?: number };
+          return {
+            ownerName: String(item.ownerName || "Store"),
+            computedProfitMinor: Number(breakdown.computedProfitMinor ?? toMinorUnits(Number(item.totalPrice || 0) - Number(item.costPrice || 0))),
+            ownerProfitMinor: toMinorUnits(Number(item.ownerProfit || 0)),
+            otherOwnerProfitMinor: toMinorUnits(Number(item.otherOwnerProfit || 0)),
+          };
+        }),
+        owner1Name,
+        owner2Name,
+        owner1Share,
+      });
 
       await db.collection(Collections.orders).doc(id).update({
         subtotal,
@@ -216,6 +263,16 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         voucherCode: Boolean(removeVoucher) ? null : order.voucherCode || null,
         discount,
         voucherAppliedAt,
+        pricingSnapshot: { ...snapshot, generatedAt: now },
+        financialsMinor: {
+          subtotalMinor: snapshot.subtotalMinor,
+          discountMinor: snapshot.discountMinor,
+          deliveryFeeMinor: snapshot.deliveryFeeMinor,
+          totalMinor: snapshot.totalMinor,
+          totalCostMinor: snapshot.totalCostMinor,
+          totalProfitMinor: snapshot.totalProfitMinor,
+        },
+        profitDistribution: distribution,
         updatedAt: now,
       });
     }
@@ -225,17 +282,29 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (Boolean(removeVoucher)) {
     const orderRef = db.collection(Collections.orders).doc(id);
     const itemsSnap = await orderRef.collection("items").get();
-    let subtotal = 0;
-    let totalCost = 0;
+    let subtotalMinor = 0;
+    let totalCostMinor = 0;
     for (const itemDoc of itemsSnap.docs) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const item = itemDoc.data() as any;
-      subtotal += Number(item.totalPrice ?? 0);
-      totalCost += Number(item.costPrice ?? 0);
+      const itemBreakdown = item.financialBreakdown;
+      if (itemBreakdown && Number.isFinite(itemBreakdown.totalRevenueMinor) && Number.isFinite(itemBreakdown.totalCostMinor)) {
+        subtotalMinor += Number(itemBreakdown.totalRevenueMinor || 0);
+        totalCostMinor += Number(itemBreakdown.totalCostMinor || 0);
+      } else {
+        subtotalMinor += toMinorUnits(Number(item.totalPrice ?? 0));
+        totalCostMinor += toMinorUnits(Number(item.costPrice ?? 0));
+      }
     }
-    const deliveryFee = Number(order.deliveryFee ?? 0);
-    const total = subtotal + deliveryFee;
-    const profit = (total - deliveryFee) - totalCost;
+    const snapshot = buildOrderPricingSnapshot({
+      subtotalMinor,
+      discountMinor: 0,
+      deliveryFeeMinor: toMinorUnits(Number(order.deliveryFee ?? 0)),
+      totalCostMinor,
+    });
+    const subtotal = fromMinorUnits(snapshot.subtotalMinor);
+    const total = fromMinorUnits(snapshot.totalMinor);
+    const profit = fromMinorUnits(snapshot.totalProfitMinor);
 
     // If a voucher was previously applied and counted, decrement its usedCount (but not below zero).
     if (order.voucherCode && order.voucherAppliedAt) {
@@ -261,6 +330,15 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       subtotal,
       total,
       profit,
+      pricingSnapshot: { ...snapshot, generatedAt: now },
+      financialsMinor: {
+        subtotalMinor: snapshot.subtotalMinor,
+        discountMinor: snapshot.discountMinor,
+        deliveryFeeMinor: snapshot.deliveryFeeMinor,
+        totalMinor: snapshot.totalMinor,
+        totalCostMinor: snapshot.totalCostMinor,
+        totalProfitMinor: snapshot.totalProfitMinor,
+      },
       updatedAt: now,
     });
   }
@@ -490,8 +568,18 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   delete orderPatchWithoutComputed.removeVoucher;
 
   if (Object.keys(orderPatchWithoutComputed).length > 0) {
+    if (immutableFinancialStatuses.has(previousStatus)) {
+      delete orderPatchWithoutComputed.discount;
+      delete orderPatchWithoutComputed.subtotal;
+      delete orderPatchWithoutComputed.total;
+      delete orderPatchWithoutComputed.profit;
+      delete orderPatchWithoutComputed.pricingSnapshot;
+      delete orderPatchWithoutComputed.financialsMinor;
+      delete orderPatchWithoutComputed.profitDistribution;
+    }
     await db.collection(Collections.orders).doc(id).update({
       ...orderPatchWithoutComputed,
+      financialsLocked: immutableFinancialStatuses.has(String(orderPatchWithoutComputed.status || previousStatus)),
       updatedAt: Timestamp.now(),
     });
   }

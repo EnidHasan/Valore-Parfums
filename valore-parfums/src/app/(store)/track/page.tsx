@@ -43,7 +43,7 @@ const standardStatusSteps = ["Pending", "Processing", "Out for Delivery", "Compl
 const bkashStatusSteps = ["Pending Bkash Verification", "Confirmed", "Out for Delivery", "Completed"];
 const bankStatusSteps = ["Pending Bank Verification", "Paid", "Out for Delivery", "Completed"];
 const activeStatuses = new Set(["pending", "processing", "out for delivery", "confirmed", "ready", "pending bkash verification", "bkash paid", "pending bank verification", "paid"]);
-const pastStatuses = new Set(["completed", "delivered", "cancelled"]);
+const pastStatuses = new Set(["completed", "delivered", "cancelled", "dispatched"]);
 
 const statusClass = (status: string) => {
   const normalized = (status ?? "").toLowerCase().replace(/\s+/g, "");

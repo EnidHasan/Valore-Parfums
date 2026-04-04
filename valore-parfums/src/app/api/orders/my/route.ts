@@ -25,7 +25,6 @@ export async function GET() {
   }
 
   const orderDocs = Array.from(orderDocsMap.values());
-
   const missingImagePerfumeIds = new Set<string>();
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -49,16 +48,20 @@ export async function GET() {
       });
       const data = doc.data();
 
-      return {
+      const row = {
         id: doc.id,
         ...data,
+        entryType: data.entryType || "order",
+        orderSource: data.orderSource || "standard_order",
         status: data.status || "Pending",
         totalAmount: data.totalAmount ?? data.subtotal ?? 0,
         finalAmount: data.finalAmount ?? data.total ?? 0,
         items,
       };
+      return row;
     }),
   );
+  const filteredOrders = ordersWithItems.filter((order) => String(order.orderSource || "standard_order") !== "customer_request");
 
   const perfumeImageById = new Map<string, string>();
   if (missingImagePerfumeIds.size > 0) {
@@ -93,7 +96,7 @@ export async function GET() {
     }
   }
 
-  for (const order of ordersWithItems) {
+  for (const order of filteredOrders) {
     order.items = (order.items || []).map((item: { perfumeId?: string; perfumeImage?: string }) => {
       if (item.perfumeImage) return item;
       return {
@@ -103,11 +106,11 @@ export async function GET() {
     });
   }
 
-  ordersWithItems.sort((a, b) => {
+  filteredOrders.sort((a, b) => {
     const da = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
     const db2 = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
     return db2.getTime() - da.getTime();
   });
 
-  return NextResponse.json(serializeDoc(ordersWithItems));
+  return NextResponse.json(serializeDoc(filteredOrders));
 }
