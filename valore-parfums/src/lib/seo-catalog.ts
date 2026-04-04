@@ -1,5 +1,8 @@
 import { db, Collections, serializeDoc } from "@/lib/prisma";
+import { parseImageList } from "@/lib/image-utils";
 import { calculateSellingPrice, getBrandTier, getTierProfitMargin, parseTierMargins } from "@/lib/utils";
+
+export { parseImageList } from "@/lib/image-utils";
 
 export const SITE_NAME = "Valore Parfums";
 export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://valoreparfums.com";
@@ -121,17 +124,6 @@ export function buildProductMetaTitle(perfume: Pick<PerfumeDocument, "name" | "b
 
 export function buildProductMetaDescription(perfume: Pick<PerfumeDocument, "name">): string {
   return `Buy 100% authentic ${perfume.name} decants (3ml, 10ml, 15ml, 30ml) in Bangladesh. Try before you buy. Full bottle available on request.`;
-}
-
-export function parseImageList(imagesRaw: string | undefined): string[] {
-  if (!imagesRaw) return [];
-  try {
-    const parsed = JSON.parse(imagesRaw);
-    if (Array.isArray(parsed)) return parsed.filter((item) => typeof item === "string");
-    return [];
-  } catch {
-    return [];
-  }
 }
 
 export async function getActivePerfumes(): Promise<PerfumeDocument[]> {

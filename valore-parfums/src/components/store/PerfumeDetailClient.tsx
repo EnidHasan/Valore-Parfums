@@ -7,7 +7,7 @@ import { toast } from "@/components/ui/Toaster";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, Minus, Plus, ShoppingBag, Heart } from "lucide-react";
-import { parseImageList } from "@/lib/seo-catalog";
+import { parseImageList } from "@/lib/image-utils";
 
 interface Perfume {
   id: string;
