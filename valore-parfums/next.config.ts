@@ -1,4 +1,6 @@
 import type { NextConfig } from "next";
+// Detect Netlify environment
+const isNetlify = process.env.NEXT_PUBLIC_ENV === "netlify";
 
 const nextConfig: NextConfig = {
   // Compress responses with gzip (Brotli handled by CDN/reverse proxy)
@@ -14,7 +16,7 @@ const nextConfig: NextConfig = {
   images: {
     formats: ["image/avif", "image/webp"],
     minimumCacheTTL: 60 * 60 * 24 * 30, // 30 days
-    dangerouslyAllowLocalIP: process.env.NODE_ENV !== "production",
+    dangerouslyAllowLocalIP: process.env.NODE_ENV !== "production" && !isNetlify,
     deviceSizes: [640, 750, 828, 1080, 1200],
     imageSizes: [16, 32, 48, 64, 96, 128, 256],
     remotePatterns: [
@@ -27,7 +29,8 @@ const nextConfig: NextConfig = {
 
   // Headers for caching and security
   async headers() {
-    return [
+    // Example: Add Netlify-specific headers if needed
+    const baseHeaders = [
       {
         source: "/:path*",
         headers: [
@@ -49,6 +52,11 @@ const nextConfig: NextConfig = {
         ],
       },
     ];
+    if (isNetlify) {
+      // Example: Add Netlify-specific headers here if needed
+      // baseHeaders.push({ source: "/netlify/*", headers: [{ key: "X-From-Netlify", value: "true" }] });
+    }
+    return baseHeaders;
   },
 };
 
