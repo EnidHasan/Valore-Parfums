@@ -3,6 +3,7 @@ import { db, Collections, serializeDoc } from "@/lib/prisma";
 import { v4 as uuid } from "uuid";
 import { Timestamp } from "firebase-admin/firestore";
 import { requireAdmin, getSessionUser } from "@/lib/auth";
+import { buildOrderPricingSnapshot } from "@/lib/finance";
 
 // GET requests
 // Admin: returns all requests
@@ -25,10 +26,15 @@ export async function GET(req: Request) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Login required" }, { status: 401 });
 
+  // Query by multiple identifiers to support legacy records and avoid
+  // requiring a composite index for where+orderBy.
   const requestsRef = db.collection(Collections.requests);
-  const queries = [requestsRef.where("userId", "==", user.id).get()];
+  const queries = [
+    requestsRef.where("userId", "==", user.id).get(),
+  ];
   if (user.email) {
     queries.push(requestsRef.where("userEmail", "==", user.email).get());
+    queries.push(requestsRef.where("customerEmail", "==", user.email).get());
   }
 
   const snapshots = await Promise.all(queries);
@@ -82,6 +88,7 @@ export async function POST(req: Request) {
   const id = uuid();
   const now = Timestamp.now();
   const data = {
+    entryType: "request",
     perfumeName: String(perfumeName).slice(0, 200),
     brand: String(brand || "").slice(0, 100),
     type, // "decant" | "full_bottle"
@@ -97,10 +104,19 @@ export async function POST(req: Request) {
   };
 
   const orderStatus = type === "full_bottle" ? "Sourcing" : "Pending";
+  const pricingSnapshot = buildOrderPricingSnapshot({
+    subtotalMinor: 0,
+    discountMinor: 0,
+    deliveryFeeMinor: 0,
+    totalCostMinor: 0,
+  });
   const orderData = {
+    entryType: "request",
     customerName: user.name,
     customerPhone: "",
     customerEmail: user.email,
+    userId: user.id,
+    isGuestOrder: false,
     pickupMethod: "Pickup",
     status: orderStatus,
     orderSource: "customer_request",
@@ -113,6 +129,17 @@ export async function POST(req: Request) {
     total: 0,
     profit: 0,
     discount: 0,
+    pricingSnapshot,
+    financialsMinor: {
+      subtotalMinor: pricingSnapshot.subtotalMinor,
+      discountMinor: pricingSnapshot.discountMinor,
+      deliveryFeeMinor: pricingSnapshot.deliveryFeeMinor,
+      totalMinor: pricingSnapshot.totalMinor,
+      totalCostMinor: pricingSnapshot.totalCostMinor,
+      totalProfitMinor: pricingSnapshot.totalProfitMinor,
+    },
+    profitDistribution: [],
+    financialsLocked: false,
     createdAt: now,
     updatedAt: now,
   };
@@ -134,6 +161,14 @@ export async function POST(req: Request) {
       ownerName: "Store",
       ownerProfit: 0,
       otherOwnerProfit: 0,
+      financialBreakdown: {
+        unitCostMinor: 0,
+        unitSellingPriceMinor: 0,
+        quantity: data.quantity,
+        totalCostMinor: 0,
+        totalRevenueMinor: 0,
+        computedProfitMinor: 0,
+      },
       createdAt: now,
       updatedAt: now,
     }),

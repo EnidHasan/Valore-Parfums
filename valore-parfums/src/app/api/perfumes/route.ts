@@ -4,6 +4,15 @@ import { v4 as uuid } from "uuid";
 import { Timestamp } from "firebase-admin/firestore";
 import { requireAdmin } from "@/lib/auth";
 import { buildStructuredNotes, getCanonicalNotesLibrary } from "@/lib/fragrance-notes";
+import { getBrandTier } from "@/lib/utils";
+import {
+  buildCanonicalProductPath,
+  buildCanonicalProductUrl,
+  getProductKeywordBundle,
+  resolveBrandSlug,
+  resolvePerfumeSlug,
+  serializePerfumeForApi,
+} from "@/lib/seo-catalog";
 
 const PERFUMES_CACHE_TTL = 20_000;
 const PERFUMES_CACHE_CONTROL = "public, s-maxage=20, stale-while-revalidate=60";
@@ -42,12 +51,17 @@ export async function GET(req: Request) {
 
   const payload = perfumes.map((perfume) => {
     const hasKeyNotes = Array.isArray(perfume.keyNotes) && perfume.keyNotes.length > 0;
+    const perfumeSlug = resolvePerfumeSlug(perfume);
+    const brandSlug = resolveBrandSlug(perfume);
+    const keywordBundle = getProductKeywordBundle(perfume.name || "perfume");
 
     if (active === "true") {
-      return serializeDoc({
+      return serializePerfumeForApi({
         id: perfume.id,
         name: perfume.name,
         brand: perfume.brand,
+        slug: perfumeSlug,
+        brandSlug,
         inspiredBy: perfume.inspiredBy,
         category: perfume.category,
         images: perfume.images,
@@ -57,16 +71,24 @@ export async function GET(req: Request) {
         isActive: perfume.isActive,
         createdAt: perfume.createdAt,
         keyNotes: hasKeyNotes ? perfume.keyNotes : [],
+        seoKeywords: keywordBundle,
+        canonicalPath: buildCanonicalProductPath({ ...perfume, slug: perfumeSlug, brandSlug }),
+        canonicalUrl: buildCanonicalProductUrl({ ...perfume, slug: perfumeSlug, brandSlug }),
       });
     }
 
     const notes = buildStructuredNotes(perfume, canonicalNotesLibrary);
-    return serializeDoc({
+    return serializePerfumeForApi({
       ...perfume,
+      slug: perfumeSlug,
+      brandSlug,
       keyNotes: notes.keyNotes,
       fragranceNotes: notes.fragranceNotes,
       fragranceNoteIds: notes.fragranceNoteIds,
       noteSearchIndex: notes.noteSearchIndex,
+      seoKeywords: keywordBundle,
+      canonicalPath: buildCanonicalProductPath({ ...perfume, slug: perfumeSlug, brandSlug }),
+      canonicalUrl: buildCanonicalProductUrl({ ...perfume, slug: perfumeSlug, brandSlug }),
     });
   });
   perfumesCache.set(cacheKey, { data: payload, ts: Date.now() });
@@ -79,11 +101,30 @@ export async function POST(req: Request) {
   if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const body = await req.json();
+    const purchasePricePerMl = Number(body.purchasePricePerMl ?? 0);
+    const marketPricePerMl = Number(body.marketPricePerMl ?? 0);
+    const bottleSizeMl = Number(body.totalStockMl ?? 0);
+    const normalizedBottleSizeMl = Number.isFinite(bottleSizeMl) && bottleSizeMl > 0 ? bottleSizeMl : 0;
+    const bottleCost = Number(body.bottleCost ?? 0);
+    const packagingCost = Number(body.packagingCost ?? 0);
     const id = uuid();
     const now = Timestamp.now();
     const notes = buildStructuredNotes(body);
+    const slug = resolvePerfumeSlug({ name: String(body.name || "") });
+    const brandSlug = resolveBrandSlug({ brand: String(body.brand || "") });
+    const seoKeywords = getProductKeywordBundle(String(body.name || "perfume"));
+
     const data = {
       ...body,
+      slug,
+      brandSlug,
+      purchasePricePerMl,
+      marketPricePerMl,
+      totalStockMl: normalizedBottleSizeMl,
+      costPricePerMl: purchasePricePerMl,
+      bottleCost: Number.isFinite(bottleCost) ? bottleCost : 0,
+      packagingCost: Number.isFinite(packagingCost) ? packagingCost : 0,
+      pricingTier: getBrandTier(marketPricePerMl * Math.max(1, normalizedBottleSizeMl || 100)),
       fragranceNoteIds: notes.fragranceNoteIds,
       fragranceNotes: notes.fragranceNotes,
       topNoteIds: notes.fragranceNoteIds.top,
@@ -95,6 +136,13 @@ export async function POST(req: Request) {
       keyNotes: notes.keyNotes,
       noteSearchIndex: notes.noteSearchIndex,
       noteIdIndex: notes.noteIdIndex,
+      seoKeywords,
+      canonicalPath: buildCanonicalProductPath({ name: String(body.name || ""), brand: String(body.brand || ""), slug, brandSlug }),
+      canonicalUrl: buildCanonicalProductUrl({ name: String(body.name || ""), brand: String(body.brand || ""), slug, brandSlug }),
+      fullBottleAvailable: body.fullBottleAvailable ?? true,
+      fullBottlePrice: body.fullBottlePrice ?? null,
+      rating: Number(body.rating ?? 4.9),
+      reviewCount: Number(body.reviewCount ?? 0),
       totalOrders: Number(body.totalOrders ?? 0),
       createdAt: now,
       updatedAt: now,
