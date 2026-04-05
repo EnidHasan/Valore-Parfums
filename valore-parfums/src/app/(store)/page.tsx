@@ -9,6 +9,8 @@ interface Perfume {
   id: string;
   name: string;
   brand: string;
+  slug: string;
+  canonicalPath?: string;
   inspiredBy: string;
   category: string;
   images: string;
@@ -32,7 +34,7 @@ function PerfumeCard({ perfume, prices }: { perfume: Perfume; prices?: PriceInfo
   const isDynamicBestSeller = Number(perfume.totalOrders || 0) > 0 || perfume.isBestSeller;
 
   return (
-    <Link href={`/perfume/${perfume.id}`}>
+    <Link href={perfume.canonicalPath || `/products/${perfume.slug}`}>
       <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded overflow-hidden card-hover group">
         <div className="aspect-[3/4] bg-[var(--bg-surface)] relative img-zoom">
           {images[0] ? (

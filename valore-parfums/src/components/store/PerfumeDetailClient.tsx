@@ -253,7 +253,7 @@ export default function PerfumePage({ params }: { params: Promise<{ id: string }
             </button>
           </div>
 
-          <h1 className="font-serif text-4xl font-light">{perfume.brand} {perfume.name} - Authentic Decant</h1>
+          <h1 className="font-serif text-4xl font-light">{perfume.brand} {perfume.name}</h1>
 
           {perfume.inspiredBy && (
             <p className="text-xs uppercase tracking-[0.15em] text-[var(--text-muted)]">

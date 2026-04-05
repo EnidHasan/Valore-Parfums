@@ -23,7 +23,7 @@ export default async function FullBottleCategoryPage() {
         <h2 className="font-serif text-2xl font-light mb-4">Popular Full Bottle Requests</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {perfumes.slice(0, 24).map((perfume) => (
-            <Link key={perfume.id} href={buildCanonicalProductPath(perfume)} className="border border-[var(--border)] rounded px-4 py-3 hover:border-[var(--gold)] transition-colors">
+            <Link key={perfume.id} href={`/products/${perfume.slug}`} className="border border-[var(--border)] rounded px-4 py-3 hover:border-[var(--gold)] transition-colors">
               <p className="text-sm font-medium">{perfume.name}</p>
               <p className="text-xs text-[var(--text-muted)]">Request full bottle of {perfume.brand}</p>
             </Link>

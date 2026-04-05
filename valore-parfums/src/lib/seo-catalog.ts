@@ -145,8 +145,14 @@ export function resolveBrandSlug(perfume: Pick<PerfumeDocument, "brand" | "brand
   return perfume.brandSlug && perfume.brandSlug.trim() ? perfume.brandSlug : slugify(perfume.brand);
 }
 
+export function buildProductSlug(perfume: Pick<PerfumeDocument, "name" | "slug" | "brand" | "brandSlug">): string {
+  const brandSlug = resolveBrandSlug(perfume);
+  const perfumeSlug = resolvePerfumeSlug(perfume);
+  return perfumeSlug.startsWith(`${brandSlug}-`) ? perfumeSlug : `${brandSlug}-${perfumeSlug}`;
+}
+
 export function buildCanonicalProductPath(perfume: Pick<PerfumeDocument, "name" | "slug" | "brand" | "brandSlug">): string {
-  return `/brand/${resolveBrandSlug(perfume)}/${resolvePerfumeSlug(perfume)}`;
+  return `/products/${buildProductSlug(perfume)}`;
 }
 
 export function buildCanonicalProductUrl(perfume: Pick<PerfumeDocument, "name" | "slug" | "brand" | "brandSlug">): string {

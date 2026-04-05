@@ -29,6 +29,8 @@ interface OrderResult {
   createdAt: string;
   items: {
     perfumeId?: string;
+    perfumeSlug?: string;
+    perfumeCanonicalPath?: string;
     perfumeName: string;
     perfumeImage?: string;
     ml: number;
@@ -309,7 +311,13 @@ export default function TrackOrderPage() {
                   ? `Full Bottle (${item.fullBottleSize || "Custom"})`
                   : `${item.ml}ml`;
                 const imageSrc = resolveImageSrc(item.perfumeImage);
-                const productHref = item.perfumeId ? `/perfume/${item.perfumeId}` : "";
+                const productHref = item.perfumeCanonicalPath
+                  ? item.perfumeCanonicalPath
+                  : item.perfumeSlug
+                    ? `/products/${item.perfumeSlug}`
+                    : item.perfumeId
+                      ? `/perfume/${item.perfumeId}`
+                      : "";
 
                 return (
                   <div

@@ -36,7 +36,55 @@ type SearchPerfume = {
   [key: string]: unknown;
 };
 
+type BrandSections = {
+  uaeBrands: string[];
+  nicheBrands: string[];
+  designerBrands: string[];
+};
+
+const DEFAULT_BRAND_SECTIONS: BrandSections = {
+  uaeBrands: [
+    "lattafa",
+    "armaf",
+    "afnan",
+    "fragrance world",
+    "rasasi",
+    "al haramain",
+    "al-haramain",
+    "ajmal",
+    "arabiyat",
+    "emir",
+    "paris corner",
+    "riyad",
+    "my perfumes",
+    "zimaya",
+  ],
+  nicheBrands: [
+    "creed",
+    "amouage",
+    "xerjoff",
+    "parfums de marly",
+    "roja",
+    "initio",
+    "montale",
+    "mancera",
+    "nishane",
+    "byredo",
+    "diptyque",
+    "killian",
+    "bdk",
+    "memo",
+    "penhaligon",
+    "maison francis kurkdjian",
+    "mfk",
+    "frederic malle",
+    "le labo",
+  ],
+  designerBrands: [],
+};
+
 let activePerfumesCache: { data: SearchPerfume[]; brands: string[]; ts: number } | null = null;
+let brandSectionsCache: { data: BrandSections; ts: number } | null = null;
 const searchResultCache = new Map<string, { body: { perfumes: unknown[]; brands: string[] }; ts: number }>();
 
 function asDate(value: SearchPerfume["createdAt"]): Date {
@@ -65,6 +113,86 @@ function asLowerList(values: unknown): string[] {
     .filter((value): value is string => typeof value === "string")
     .map((value) => value.toLowerCase().trim())
     .filter(Boolean);
+}
+
+function normalizeBrandName(value: string): string {
+  return value.toLowerCase().trim().replace(/\s+/g, " ");
+}
+
+async function getBrandSections(): Promise<BrandSections> {
+  if (brandSectionsCache && Date.now() - brandSectionsCache.ts < ACTIVE_CACHE_TTL) {
+    return brandSectionsCache.data;
+  }
+
+  try {
+    const doc = await db.collection(Collections.settings).doc("default").get();
+    const raw = (doc.data()?.brandSections || {}) as Record<string, unknown>;
+
+    const toList = (value: unknown, fallback: string[]) => {
+      if (!Array.isArray(value)) return fallback;
+      const parsed = value
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => normalizeBrandName(item))
+        .filter(Boolean);
+      return parsed.length > 0 ? Array.from(new Set(parsed)) : fallback;
+    };
+
+    const data: BrandSections = {
+      uaeBrands: toList(raw.uaeBrands, DEFAULT_BRAND_SECTIONS.uaeBrands),
+      nicheBrands: toList(raw.nicheBrands, DEFAULT_BRAND_SECTIONS.nicheBrands),
+      designerBrands: toList(raw.designerBrands, DEFAULT_BRAND_SECTIONS.designerBrands),
+    };
+
+    brandSectionsCache = { data, ts: Date.now() };
+    return data;
+  } catch {
+    return DEFAULT_BRAND_SECTIONS;
+  }
+}
+
+function matchesBrandGroup(perfumeBrand: string, brandFilter: string, sections: BrandSections): boolean {
+  const brand = normalizeBrandName(perfumeBrand);
+  const filter = normalizeBrandName(brandFilter);
+
+  if (!filter) return true;
+
+  // Exact brand search still works for concrete brand names.
+  if (brand === filter) return true;
+
+  const isUae = sections.uaeBrands.some((keyword) => brand.includes(normalizeBrandName(keyword)));
+  const isNiche = sections.nicheBrands.some((keyword) => brand.includes(normalizeBrandName(keyword)));
+  const isDesignerConfigured = sections.designerBrands.some((keyword) => brand.includes(normalizeBrandName(keyword)));
+
+  if (filter === "uae") return isUae;
+  if (filter === "niche") return isNiche;
+
+  // If designer list is configured in admin, prioritize it.
+  if (filter === "designer") {
+    if (sections.designerBrands.length > 0) return isDesignerConfigured;
+    return !isUae && !isNiche;
+  }
+
+  // Fallback partial match for unknown filters.
+  return brand.includes(filter);
+}
+
+function normalizeCategory(value: string): string {
+  const v = value.toLowerCase().trim();
+  if (["men", "male", "for him", "him"].includes(v)) return "men";
+  if (["women", "female", "for her", "her", "ladies"].includes(v)) return "women";
+  if (["unisex", "uni sex", "uni-sex"].includes(v)) return "unisex";
+  if (["oud", "formal fragrances", "formal"].includes(v)) return "oud";
+  return v;
+}
+
+function normalizeSeason(value: string): string {
+  const v = value.toLowerCase().trim();
+  if (["summer"].includes(v)) return "summer";
+  if (["winter"].includes(v)) return "winter";
+  if (["spring"].includes(v)) return "spring";
+  if (["fall", "autumn"].includes(v)) return "fall";
+  if (["all year", "all-year", "allseason", "all season", "year-round", "year round"].includes(v)) return "all year";
+  return v;
 }
 
 async function getActivePerfumeIndex(): Promise<{ perfumes: SearchPerfume[]; brands: string[] }> {
@@ -110,16 +238,36 @@ export async function GET(req: Request) {
   const selectedNoteIds = Array.from(new Set(selectedNotes.map((note) => byLabel.get(note)?.id || "").filter(Boolean)));
   const sort = searchParams.get("sort") || "newest";
 
-  const activeIndex = await getActivePerfumeIndex();
+  const [activeIndex, brandSections] = await Promise.all([
+    getActivePerfumeIndex(),
+    getBrandSections(),
+  ]);
   let perfumes = [...activeIndex.perfumes];
 
   // Apply filters in memory (replaces Prisma where clauses)
-  if (category) perfumes = perfumes.filter((p) => p.category === category);
-  if (season) perfumes = perfumes.filter((p) => p.season === season);
+  if (category) {
+    const expectedCategory = normalizeCategory(category);
+    perfumes = perfumes.filter((p) => {
+      if (typeof p.category !== "string") return false;
+      return normalizeCategory(p.category) === expectedCategory;
+    });
+  }
+  if (season) {
+    const expectedSeason = normalizeSeason(season);
+    perfumes = perfumes.filter((p) => {
+      if (typeof p.season !== "string") return false;
+      return normalizeSeason(p.season) === expectedSeason;
+    });
+  }
   if (bestSeller === "true") {
     perfumes = perfumes.filter((p) => Number(p.totalOrders || 0) > 0);
   }
-  if (brand) perfumes = perfumes.filter((p) => p.brand === brand);
+  if (brand) {
+    perfumes = perfumes.filter((p) => {
+      if (typeof p.brand !== "string") return false;
+      return matchesBrandGroup(p.brand, brand, brandSections);
+    });
+  }
   if (selectedNotes.length > 0) {
     perfumes = perfumes.filter((p) => {
       const noteIndex = new Set([

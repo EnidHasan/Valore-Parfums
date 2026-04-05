@@ -157,6 +157,7 @@ function CheckoutContent() {
   const searchParams = useSearchParams();
 
   const productId = searchParams.get("productId");
+  const productSlug = searchParams.get("productSlug");
   const qtyStr = searchParams.get("qty");
   const mlStr = searchParams.get("ml");
   const isBuyNow = Boolean(productId);
@@ -726,7 +727,7 @@ function CheckoutContent() {
     <div className="min-h-screen pb-28 lg:pb-8">
       <div className="mx-auto max-w-6xl px-4 pb-10 pt-5 sm:px-6 sm:pt-8">
         <Link
-          href={isBuyNow ? `/perfume/${productId}` : "/cart"}
+          href={isBuyNow ? (productSlug ? `/products/${productSlug}` : `/perfume/${productId}`) : "/cart"}
           className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.18em] text-[var(--text-muted)] transition-colors hover:text-[#C9A96E]"
         >
           <ArrowLeft size={13} /> Back to {isBuyNow ? "Product" : "Cart"}

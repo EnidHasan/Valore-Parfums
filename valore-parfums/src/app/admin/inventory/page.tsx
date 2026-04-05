@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Pencil, Trash2, Search, X } from "lucide-react";
 import { toast } from "@/components/ui/Toaster";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -131,6 +131,111 @@ function useDebouncedValue<T>(value: T, delayMs = 120): T {
   }, [delayMs, value]);
 
   return debounced;
+}
+
+function CustomBrandCombobox({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [input, setInput] = useState(value || "");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const filtered = useMemo(() => {
+    const query = input.trim().toLowerCase();
+    return options.filter((brand) => brand.toLowerCase().includes(query));
+  }, [input, options]);
+
+  useEffect(() => {
+    setInput(value || "");
+  }, [value]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as Node;
+      if (inputRef.current?.contains(target) || dropdownRef.current?.contains(target)) return;
+      setOpen(false);
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleSelect = (brand: string) => {
+    onChange(brand);
+    setInput(brand);
+    setOpen(false);
+  };
+
+  const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const nextValue = event.target.value;
+    setInput(nextValue);
+    onChange(nextValue);
+    setOpen(true);
+  };
+
+  const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "ArrowDown" && filtered.length > 0) {
+      event.preventDefault();
+      document.getElementById("brand-combo-opt-0")?.focus();
+    }
+  };
+
+  return (
+    <div className="relative">
+      <input
+        ref={inputRef}
+        type="text"
+        value={input}
+        onChange={handleInputChange}
+        onFocus={() => setOpen(true)}
+        onKeyDown={handleInputKeyDown}
+        placeholder="Select or type a brand"
+        className="w-full bg-[var(--bg-input)] border border-[var(--gold)] rounded px-3 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--gold)] focus:bg-[var(--gold-tint)] outline-none transition-colors"
+        autoComplete="off"
+      />
+
+      {open && filtered.length > 0 && (
+        <div
+          ref={dropdownRef}
+          className="absolute z-20 mt-1 w-full max-h-56 overflow-y-auto rounded border border-[var(--gold)] bg-[var(--bg-input)] shadow-lg"
+        >
+          {filtered.map((brand, index) => (
+            <button
+              key={brand}
+              id={`brand-combo-opt-${index}`}
+              type="button"
+              className="block w-full px-3 py-2 text-left text-sm text-[var(--text-primary)] hover:bg-[var(--gold-tint)] focus:bg-[var(--gold-tint)]"
+              onClick={() => handleSelect(brand)}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  document.getElementById(`brand-combo-opt-${index + 1}`)?.focus();
+                } else if (event.key === "ArrowUp") {
+                  event.preventDefault();
+                  if (index === 0) {
+                    inputRef.current?.focus();
+                  } else {
+                    document.getElementById(`brand-combo-opt-${index - 1}`)?.focus();
+                  }
+                } else if (event.key === "Enter" || event.key === "Tab") {
+                  handleSelect(brand);
+                }
+              }}
+            >
+              {brand.replace(/\b\w/g, (character) => character.toUpperCase())}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function NoteGroupSelector({
@@ -504,6 +609,17 @@ export default function InventoryPage() {
       (p.inspiredBy || "").toLowerCase().includes(search.toLowerCase())
   );
 
+  const [availableBrands, setAvailableBrands] = useState<string[]>([]);
+  useEffect(() => {
+    fetch("/api/brand-sections")
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data?.availableBrands)) {
+          setAvailableBrands(data.availableBrands);
+        }
+      });
+  }, []);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -691,15 +807,15 @@ export default function InventoryPage() {
                   className="w-full bg-[var(--bg-input)] border border-[var(--border)] rounded px-3 py-2.5 text-sm focus:border-[var(--gold)] focus:bg-[var(--gold-tint)] outline-none transition-colors"
                 />
               </div>
-              <div>
+              <div className="relative">
                 <label className="text-[10px] uppercase tracking-[0.2em] text-[var(--text-muted)] mb-1 block">Brand</label>
-                <input
-                  type="text"
+                <CustomBrandCombobox
                   value={form.brand}
-                  onChange={(e) => setForm({ ...form, brand: e.target.value })}
-                  className="w-full bg-[var(--bg-input)] border border-[var(--border)] rounded px-3 py-2.5 text-sm focus:border-[var(--gold)] focus:bg-[var(--gold-tint)] outline-none transition-colors"
+                  onChange={(brand) => setForm({ ...form, brand })}
+                  options={availableBrands}
                 />
               </div>
+
               <div>
                 <label className="text-[10px] uppercase tracking-[0.2em] text-[var(--text-muted)] mb-1 block">Inspired By</label>
                 <input

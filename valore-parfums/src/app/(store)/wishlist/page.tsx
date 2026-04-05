@@ -12,6 +12,7 @@ interface WishlistItem {
     id: string;
     name: string;
     brand: string;
+    slug: string;
     inspiredBy: string;
     category: string;
     images: string;
@@ -101,7 +102,7 @@ export default function WishlistPage() {
             const images: string[] = JSON.parse(item.perfume.images || "[]");
             return (
               <div key={item.id} className="bg-[var(--bg-card)] border border-[var(--border)] rounded overflow-hidden card-hover group relative">
-                <Link href={`/perfume/${item.perfume.id}`}>
+                <Link href={`/products/${item.perfume.slug}`}>
                   <div className="aspect-[3/4] bg-[var(--bg-surface)] img-zoom relative">
                     {images[0] ? (
                       <Image src={images[0]} alt={item.perfume.name} fill className="object-cover" sizes="(max-width: 768px) 50vw, 25vw" />

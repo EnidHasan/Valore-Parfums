@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ShoppingBag, Search, Heart, Sun, Moon, User, ChevronDown, X, Menu, LogOut } from "lucide-react";
 import { useCart } from "@/store/cart";
 import { useTheme } from "@/store/theme";
@@ -98,7 +98,10 @@ function DesktopDropdown({
             <Link
               key={item.href}
               href={item.href}
-              onClick={onCloseImmediate}
+              onClick={() => {
+                // Defer closing so Link navigation for query-string routes can complete first.
+                window.setTimeout(onCloseImmediate, 0);
+              }}
               className="block px-5 py-3.5 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--gold-tint)] border-b border-[var(--border)] last:border-b-0 transition-colors"
             >
               {item.label}
@@ -111,6 +114,7 @@ function DesktopDropdown({
 
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const items = useCart((s) => s.items);
   const { theme, toggle } = useTheme();
@@ -216,7 +220,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       setMobileExpanded(null);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [pathname]);
+  }, [pathname, searchParams.toString()]);
 
   const cartCount = items.reduce((s, i) => s + i.quantity, 0);
 
@@ -518,7 +522,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                       return (
                         <Link
                           key={p.id}
-                          href={`/perfume/${p.id}`}
+                          href={p.canonicalPath || `/products/${p.slug || p.id}`}
                           onClick={() => { setSearchOpen(false); setSearchQuery(""); setSearchResults([]); }}
                           className="flex items-center gap-3 px-4 py-3 hover:bg-[var(--gold-tint)] transition-colors"
                         >
@@ -577,7 +581,15 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
               {mobileExpanded === "shop" && (
                 <div className="pb-3 space-y-1">
                   {shopDropdown.map((item) => (
-                    <Link key={item.href} href={item.href} className="block py-2.5 pl-4 text-sm text-[var(--text-secondary)]">
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        setMobileExpanded(null);
+                      }}
+                      className="block py-2.5 pl-4 text-sm text-[var(--text-secondary)]"
+                    >
                       {item.label}
                     </Link>
                   ))}
@@ -596,7 +608,15 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
               {mobileExpanded === "seasons" && (
                 <div className="pb-3 space-y-1">
                   {seasonsDropdown.map((item) => (
-                    <Link key={item.href} href={item.href} className="block py-2.5 pl-4 text-sm text-[var(--text-secondary)]">
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        setMobileExpanded(null);
+                      }}
+                      className="block py-2.5 pl-4 text-sm text-[var(--text-secondary)]"
+                    >
                       {item.label}
                     </Link>
                   ))}
@@ -615,7 +635,15 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
               {mobileExpanded === "brands" && (
                 <div className="pb-3 space-y-1">
                   {brandsDropdown.map((item) => (
-                    <Link key={item.href} href={item.href} className="block py-2.5 pl-4 text-sm text-[var(--text-secondary)]">
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        setMobileExpanded(null);
+                      }}
+                      className="block py-2.5 pl-4 text-sm text-[var(--text-secondary)]"
+                    >
                       {item.label}
                     </Link>
                   ))}

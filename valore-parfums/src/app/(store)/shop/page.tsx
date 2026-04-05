@@ -10,6 +10,8 @@ interface Perfume {
   id: string;
   name: string;
   brand: string;
+  slug: string;
+  canonicalPath?: string;
   inspiredBy: string;
   category: string;
   images: string;
@@ -53,7 +55,7 @@ function PerfumeCard({ perfume, prices }: { perfume: Perfume; prices?: PriceInfo
   const isDynamicBestSeller = Number(perfume.totalOrders || 0) > 0 || perfume.isBestSeller;
 
   return (
-    <Link href={`/perfume/${perfume.id}`}>
+    <Link href={perfume.canonicalPath || `/products/${perfume.slug}`}>
       <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded overflow-hidden card-hover group">
         <div className="aspect-[3/4] bg-[var(--bg-surface)] relative img-zoom">
           {images[0] ? (
@@ -517,7 +519,7 @@ function ShopContent() {
         <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto pr-1">
           <button
             onClick={() => updateFilter("brand", "")}
-            className={`text-left text-sm px-3 py-1.5 rounded transition-colors ${
+            className={`flex items-center w-full text-left text-sm px-3 py-1.5 rounded transition-colors ${
               !brandParam ? "bg-[var(--gold-tint)] text-[var(--gold)] font-medium" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)]"
             }`}
           >
@@ -527,11 +529,11 @@ function ShopContent() {
             <button
               key={b}
               onClick={() => updateFilter("brand", b)}
-              className={`text-left text-sm px-3 py-1.5 rounded transition-colors truncate ${
+              className={`flex items-center w-full text-left text-sm px-3 py-1.5 rounded transition-colors ${
                 brandParam === b ? "bg-[var(--gold-tint)] text-[var(--gold)] font-medium" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)]"
               }`}
             >
-              {b}
+              <span className="truncate">{b}</span>
             </button>
           ))}
           {allBrands.length === 0 && (
