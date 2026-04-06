@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { parseImageList } from "@/lib/image-utils";
 import { DEFAULT_TIER_MARGINS, calculateSellingPrice, getBrandTier, getTierProfitMargin, parseTierMargins } from "@/lib/utils";
 
@@ -152,7 +153,7 @@ export function buildProductSlug(perfume: Pick<PerfumeDocument, "name" | "slug" 
 }
 
 export function buildCanonicalProductPath(perfume: Pick<PerfumeDocument, "name" | "slug" | "brand" | "brandSlug">): string {
-  return `/products/${buildProductSlug(perfume)}`;
+  return `/brand/${resolveBrandSlug(perfume)}/${resolvePerfumeSlug(perfume)}`;
 }
 
 export function buildCanonicalProductUrl(perfume: Pick<PerfumeDocument, "name" | "slug" | "brand" | "brandSlug">): string {
@@ -188,13 +189,113 @@ export function buildProductMetaDescription(perfume: Pick<PerfumeDocument, "name
   return `Buy 100% authentic ${perfume.name} decants (3ml, 10ml, 15ml, 30ml) in Bangladesh. Try before you buy. Full bottle available on request.`;
 }
 
-export async function getActivePerfumes(): Promise<PerfumeDocument[]> {
-  try {
-    const dataLayer = await getDataLayer();
-    if (!dataLayer) return [];
+const getActivePerfumesCached = unstable_cache(
+  async (): Promise<PerfumeDocument[]> => {
+    try {
+      const dataLayer = await getDataLayer();
+      if (!dataLayer) return [];
 
-    const snap = await dataLayer.db.collection(dataLayer.Collections.perfumes).where("isActive", "==", true).get();
-    return snap.docs.map((doc) => {
+      const snap = await dataLayer.db.collection(dataLayer.Collections.perfumes).where("isActive", "==", true).get();
+      return snap.docs.map((doc) => {
+        const raw = doc.data() as Record<string, unknown>;
+        const perfume: PerfumeDocument = {
+          id: doc.id,
+          name: String(raw.name || "Perfume"),
+          brand: String(raw.brand || "Brand"),
+          ...raw,
+        };
+
+        return {
+          ...perfume,
+          slug: resolvePerfumeSlug(perfume),
+          brandSlug: resolveBrandSlug(perfume),
+          fullBottleAvailable: perfume.fullBottleAvailable ?? true,
+        };
+      });
+    } catch (error) {
+      console.error("getActivePerfumes failed", error);
+      return [];
+    }
+  },
+  ["active-perfumes"],
+  { revalidate: 300, tags: ["perfumes"] },
+);
+
+export async function getActivePerfumes(): Promise<PerfumeDocument[]> {
+  return getActivePerfumesCached();
+}
+
+const getPerfumeByBrandAndSlugCached = unstable_cache(
+  async (brandSlug: string, perfumeSlug: string): Promise<PerfumeDocument | null> => {
+    try {
+      const dataLayer = await getDataLayer();
+      if (!dataLayer) return null;
+
+      const bySlugSnap = await dataLayer.db.collection(dataLayer.Collections.perfumes).where("slug", "==", perfumeSlug).limit(10).get();
+      const docs = bySlugSnap.docs.map((doc) => {
+        const raw = doc.data() as Record<string, unknown>;
+        return {
+          id: doc.id,
+          name: String(raw.name || "Perfume"),
+          brand: String(raw.brand || "Brand"),
+          ...raw,
+        } as PerfumeDocument;
+      });
+
+      const matched = docs.find((item) => resolveBrandSlug(item) === brandSlug && Boolean(item.isActive));
+      if (matched) {
+        return {
+          ...matched,
+          name: String(matched.name || "Perfume"),
+          brand: String(matched.brand || "Brand"),
+          slug: resolvePerfumeSlug(matched),
+          brandSlug: resolveBrandSlug(matched),
+          fullBottleAvailable: matched.fullBottleAvailable ?? true,
+        };
+      }
+
+      const fallbackSnap = await dataLayer.db.collection(dataLayer.Collections.perfumes).where("isActive", "==", true).get();
+      const fallbackDocs = fallbackSnap.docs.map((doc) => {
+        const raw = doc.data() as Record<string, unknown>;
+        return {
+          id: doc.id,
+          name: String(raw.name || "Perfume"),
+          brand: String(raw.brand || "Brand"),
+          ...raw,
+        } as PerfumeDocument;
+      });
+      const fallbackMatch = fallbackDocs.find((item) => resolveBrandSlug(item) === brandSlug && resolvePerfumeSlug(item) === perfumeSlug);
+      if (!fallbackMatch) return null;
+
+      return {
+        ...fallbackMatch,
+        name: String(fallbackMatch.name || "Perfume"),
+        brand: String(fallbackMatch.brand || "Brand"),
+        slug: resolvePerfumeSlug(fallbackMatch),
+        brandSlug: resolveBrandSlug(fallbackMatch),
+        fullBottleAvailable: fallbackMatch.fullBottleAvailable ?? true,
+      };
+    } catch (error) {
+      console.error("getPerfumeByBrandAndSlug failed", error);
+      return null;
+    }
+  },
+  ["perfume-by-brand-and-slug"],
+  { revalidate: 300, tags: ["perfumes"] },
+);
+
+export async function getPerfumeByBrandAndSlug(brandSlug: string, perfumeSlug: string): Promise<PerfumeDocument | null> {
+  return getPerfumeByBrandAndSlugCached(brandSlug, perfumeSlug);
+}
+
+const getPerfumeByIdCached = unstable_cache(
+  async (id: string): Promise<PerfumeDocument | null> => {
+    try {
+      const dataLayer = await getDataLayer();
+      if (!dataLayer) return null;
+
+      const doc = await dataLayer.db.collection(dataLayer.Collections.perfumes).doc(id).get();
+      if (!doc.exists) return null;
       const raw = doc.data() as Record<string, unknown>;
       const perfume: PerfumeDocument = {
         id: doc.id,
@@ -202,101 +303,25 @@ export async function getActivePerfumes(): Promise<PerfumeDocument[]> {
         brand: String(raw.brand || "Brand"),
         ...raw,
       };
-
       return {
         ...perfume,
+        name: String(perfume.name || "Perfume"),
+        brand: String(perfume.brand || "Brand"),
         slug: resolvePerfumeSlug(perfume),
         brandSlug: resolveBrandSlug(perfume),
         fullBottleAvailable: perfume.fullBottleAvailable ?? true,
       };
-    });
-  } catch (error) {
-    console.error("getActivePerfumes failed", error);
-    return [];
-  }
-}
-
-export async function getPerfumeByBrandAndSlug(brandSlug: string, perfumeSlug: string): Promise<PerfumeDocument | null> {
-  try {
-    const dataLayer = await getDataLayer();
-    if (!dataLayer) return null;
-
-    const bySlugSnap = await dataLayer.db.collection(dataLayer.Collections.perfumes).where("slug", "==", perfumeSlug).limit(10).get();
-    const docs = bySlugSnap.docs.map((doc) => {
-      const raw = doc.data() as Record<string, unknown>;
-      return {
-        id: doc.id,
-        name: String(raw.name || "Perfume"),
-        brand: String(raw.brand || "Brand"),
-        ...raw,
-      } as PerfumeDocument;
-    });
-
-    const matched = docs.find((item) => resolveBrandSlug(item) === brandSlug && Boolean(item.isActive));
-    if (matched) {
-      return {
-        ...matched,
-        name: String(matched.name || "Perfume"),
-        brand: String(matched.brand || "Brand"),
-        slug: resolvePerfumeSlug(matched),
-        brandSlug: resolveBrandSlug(matched),
-        fullBottleAvailable: matched.fullBottleAvailable ?? true,
-      };
+    } catch (error) {
+      console.error("getPerfumeById failed", error);
+      return null;
     }
-
-    const fallbackSnap = await dataLayer.db.collection(dataLayer.Collections.perfumes).where("isActive", "==", true).get();
-    const fallbackDocs = fallbackSnap.docs.map((doc) => {
-      const raw = doc.data() as Record<string, unknown>;
-      return {
-        id: doc.id,
-        name: String(raw.name || "Perfume"),
-        brand: String(raw.brand || "Brand"),
-        ...raw,
-      } as PerfumeDocument;
-    });
-    const fallbackMatch = fallbackDocs.find((item) => resolveBrandSlug(item) === brandSlug && resolvePerfumeSlug(item) === perfumeSlug);
-    if (!fallbackMatch) return null;
-
-    return {
-      ...fallbackMatch,
-      name: String(fallbackMatch.name || "Perfume"),
-      brand: String(fallbackMatch.brand || "Brand"),
-      slug: resolvePerfumeSlug(fallbackMatch),
-      brandSlug: resolveBrandSlug(fallbackMatch),
-      fullBottleAvailable: fallbackMatch.fullBottleAvailable ?? true,
-    };
-  } catch (error) {
-    console.error("getPerfumeByBrandAndSlug failed", error);
-    return null;
-  }
-}
+  },
+  ["perfume-by-id"],
+  { revalidate: 300, tags: ["perfumes"] },
+);
 
 export async function getPerfumeById(id: string): Promise<PerfumeDocument | null> {
-  try {
-    const dataLayer = await getDataLayer();
-    if (!dataLayer) return null;
-
-    const doc = await dataLayer.db.collection(dataLayer.Collections.perfumes).doc(id).get();
-    if (!doc.exists) return null;
-    const raw = doc.data() as Record<string, unknown>;
-    const perfume: PerfumeDocument = {
-      id: doc.id,
-      name: String(raw.name || "Perfume"),
-      brand: String(raw.brand || "Brand"),
-      ...raw,
-    };
-    return {
-      ...perfume,
-      name: String(perfume.name || "Perfume"),
-      brand: String(perfume.brand || "Brand"),
-      slug: resolvePerfumeSlug(perfume),
-      brandSlug: resolveBrandSlug(perfume),
-      fullBottleAvailable: perfume.fullBottleAvailable ?? true,
-    };
-  } catch (error) {
-    console.error("getPerfumeById failed", error);
-    return null;
-  }
+  return getPerfumeByIdCached(id);
 }
 
 export async function getRelatedPerfumes(perfume: PerfumeDocument, limit = 6): Promise<PerfumeDocument[]> {
@@ -312,32 +337,40 @@ export async function getRelatedPerfumes(perfume: PerfumeDocument, limit = 6): P
     .slice(0, limit);
 }
 
+const getPerfumeReviewsCached = unstable_cache(
+  async (perfumeId: string): Promise<PerfumeReview[]> => {
+    try {
+      const dataLayer = await getDataLayer();
+      if (!dataLayer) return [];
+
+      // Fetch without orderBy to avoid index requirement, then sort in memory
+      const snap = await dataLayer.db
+        .collection(dataLayer.Collections.perfumeReviews)
+        .where("perfumeId", "==", perfumeId)
+        .limit(100)
+        .get();
+
+      const reviews = snap.docs.map((doc) => serializeDocSafe({ id: doc.id, ...doc.data() })) as PerfumeReview[];
+
+      // Sort by createdAt in descending order and limit to 50
+      return reviews
+        .sort((a, b) => {
+          const aTime = (a.createdAt as any) instanceof Date ? ((a.createdAt as any) as Date).getTime() : 0;
+          const bTime = (b.createdAt as any) instanceof Date ? ((b.createdAt as any) as Date).getTime() : 0;
+          return bTime - aTime;
+        })
+        .slice(0, 50);
+    } catch (error) {
+      console.error("getPerfumeReviews failed", error);
+      return [];
+    }
+  },
+  ["perfume-reviews"],
+  { revalidate: 120, tags: ["perfumes", "reviews"] },
+);
+
 export async function getPerfumeReviews(perfumeId: string): Promise<PerfumeReview[]> {
-  try {
-    const dataLayer = await getDataLayer();
-    if (!dataLayer) return [];
-
-    // Fetch without orderBy to avoid index requirement, then sort in memory
-    const snap = await dataLayer.db
-      .collection(dataLayer.Collections.perfumeReviews)
-      .where("perfumeId", "==", perfumeId)
-      .limit(100)
-      .get();
-
-    const reviews = snap.docs.map((doc) => serializeDocSafe({ id: doc.id, ...doc.data() })) as PerfumeReview[];
-    
-    // Sort by createdAt in descending order and limit to 50
-    return reviews
-      .sort((a, b) => {
-        const aTime = (a.createdAt as any) instanceof Date ? ((a.createdAt as any) as Date).getTime() : 0;
-        const bTime = (b.createdAt as any) instanceof Date ? ((b.createdAt as any) as Date).getTime() : 0;
-        return bTime - aTime;
-      })
-      .slice(0, 50);
-  } catch (error) {
-    console.error("getPerfumeReviews failed", error);
-    return [];
-  }
+  return getPerfumeReviewsCached(perfumeId);
 }
 
 async function getPricingConfig() {

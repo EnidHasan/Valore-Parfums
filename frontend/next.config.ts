@@ -6,12 +6,14 @@ const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:300
 const nextConfig: NextConfig = {
   // Compress responses with gzip (Brotli handled by CDN/reverse proxy)
   compress: true,
+  poweredByHeader: false,
 
-  // Allow Turbopack to use system TLS certificates so Google Fonts can be
-  // fetched during the build (required when the build host uses a custom CA).
   experimental: {
     turbopackUseSystemTlsCerts: true,
   },
+
+  // Allow Turbopack to use system TLS certificates so Google Fonts can be
+  // fetched during the build (required when the build host uses a custom CA).
 
   // Frontend-only app: proxy all API calls to the backend service.
   async rewrites() {
@@ -47,7 +49,7 @@ const nextConfig: NextConfig = {
         // Cache static assets aggressively
         source: "/(.*)\\.(js|css|woff2|woff|ttf|ico|svg)$",
         headers: [
-          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+          { key: "Cache-Control", value: "public, max-age=31536000, immutable, stale-while-revalidate=86400" },
         ],
       },
       {

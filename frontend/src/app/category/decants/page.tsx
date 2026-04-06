@@ -3,6 +3,8 @@ import Link from "next/link";
 import { buildCanonicalProductPath, getActivePerfumes, parseImageList } from "@/lib/seo-catalog";
 import Image from "next/image";
 
+export const revalidate = 300;
+
 export const metadata: Metadata = {
   title: "Perfume Decants Category | 3ml, 10ml, 15ml, 30ml Bangladesh",
   description: "Shop authentic perfume decants in Bangladesh. Explore 3ml, 10ml, 15ml, and 30ml variants from popular brands.",
@@ -26,7 +28,7 @@ export default async function DecantsCategoryPage() {
         {perfumes.map((perfume) => {
           const image = parseImageList(perfume.images)[0];
           return (
-            <Link key={perfume.id} href={`/products/${perfume.slug}`} className="border border-[var(--border)] rounded overflow-hidden hover:border-[var(--gold)] transition-colors">
+            <Link key={perfume.id} href={buildCanonicalProductPath(perfume)} className="border border-[var(--border)] rounded overflow-hidden hover:border-[var(--gold)] transition-colors">
               <div className="aspect-[3/4] bg-[var(--bg-surface)] relative">
                 {image ? (
                   <Image src={image} alt={perfume.name} fill className="object-cover" sizes="(max-width: 768px) 50vw, 25vw" loading="lazy" />

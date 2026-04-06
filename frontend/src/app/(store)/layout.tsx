@@ -8,6 +8,7 @@ import { useCart } from "@/store/cart";
 import { useTheme } from "@/store/theme";
 import { useAuth } from "@/store/auth";
 import { useState, useEffect, useRef, useCallback } from "react";
+import { buildCanonicalProductPath } from "@/lib/product-path";
 
 const ANNOUNCEMENTS_CACHE_KEY = "vp-announcements";
 const ANNOUNCEMENTS_CACHE_TTL = 60_000;
@@ -521,7 +522,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                       return (
                         <Link
                           key={p.id}
-                          href={p.canonicalPath || `/products/${p.slug || p.id}`}
+                          href={p.canonicalPath || buildCanonicalProductPath(p)}
                           onClick={() => { setSearchOpen(false); setSearchQuery(""); setSearchResults([]); }}
                           className="flex items-center gap-3 px-4 py-3 hover:bg-[var(--gold-tint)] transition-colors"
                         >
