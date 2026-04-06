@@ -15,12 +15,12 @@ interface Perfume {
   brand: string;
   slug?: string;
   brandSlug?: string;
-  inspiredBy: string;
-  description: string;
-  category: string;
-  images: string;
-  totalStockMl: number;
-  marketPricePerMl: number;
+  inspiredBy?: string;
+  description?: string;
+  category?: string;
+  images?: string;
+  totalStockMl?: number;
+  marketPricePerMl?: number;
   isPersonalCollection?: boolean;
   purchasePricePerMl?: number;
   fragranceNotes?: {
@@ -49,15 +49,25 @@ interface BulkRule {
   discountPercent: number;
 }
 
-export default function PerfumePage({ params }: { params: Promise<{ id: string }> }) {
+export default function PerfumePage({
+  params,
+  initialPerfume,
+  initialPrices,
+  initialBulkRules,
+}: {
+  params: Promise<{ id: string }>;
+  initialPerfume?: Perfume | null;
+  initialPrices?: PriceOption[];
+  initialBulkRules?: BulkRule[];
+}) {
   const { id } = use(params);
-  const [perfume, setPerfume] = useState<Perfume | null>(null);
-  const [prices, setPrices] = useState<PriceOption[]>([]);
-  const [bulkRules, setBulkRules] = useState<BulkRule[]>([]);
-  const [selectedMl, setSelectedMl] = useState<number | null>(null);
+  const [perfume, setPerfume] = useState<Perfume | null>(initialPerfume ?? null);
+  const [prices, setPrices] = useState<PriceOption[]>(initialPrices ?? []);
+  const [bulkRules, setBulkRules] = useState<BulkRule[]>(initialBulkRules ?? []);
+  const [selectedMl, setSelectedMl] = useState<number | null>(() => initialPrices?.find((price) => price.available)?.ml ?? null);
   const [selectedOption, setSelectedOption] = useState<"decant" | "full-bottle">("decant");
   const [quantity, setQuantity] = useState(1);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!(initialPerfume && (initialPrices?.length ?? 0) > 0));
   const [showRequest, setShowRequest] = useState(false);
   const [reqForm, setReqForm] = useState({ customerName: "", customerPhone: "", desiredMl: 0, quantity: 1 });
   const [wishlisted, setWishlisted] = useState(false);
@@ -78,6 +88,13 @@ export default function PerfumePage({ params }: { params: Promise<{ id: string }
   };
 
   useEffect(() => {
+    if (initialPerfume && (initialPrices?.length ?? 0) > 0) {
+      setLoading(false);
+      const firstAvail = initialPrices?.find((pr) => pr.available);
+      if (firstAvail) setSelectedMl(firstAvail.ml);
+      return;
+    }
+
     Promise.all([
       fetchJsonSafe<Perfume | null>(`/api/perfumes/${id}`, null),
       fetchJsonSafe<{ prices?: PriceOption[]; bulkRules?: BulkRule[] }>(`/api/pricing?perfumeId=${id}`, {}),
@@ -92,7 +109,7 @@ export default function PerfumePage({ params }: { params: Promise<{ id: string }
         if (firstAvail) setSelectedMl(firstAvail.ml);
       })
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, initialPerfume, initialPrices]);
 
   // Check wishlist status
   useEffect(() => {
@@ -127,7 +144,7 @@ export default function PerfumePage({ params }: { params: Promise<{ id: string }
 
   const selectedPrice = prices.find((p) => p.ml === selectedMl);
   const images: string[] = perfume ? parseImageList(perfume.images) : [];
-  const outOfStock = perfume && perfume.totalStockMl <= 0;
+  const outOfStock = perfume ? Number(perfume.totalStockMl || 0) <= 0 : false;
 
   // Calculate bulk discount for current quantity — pick the highest-tier rule that applies
   const activeBulkRule = bulkRules.reduce<BulkRule | null>((best, rule) => {
@@ -247,7 +264,7 @@ export default function PerfumePage({ params }: { params: Promise<{ id: string }
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <span className="text-[10px] uppercase tracking-[0.2em] text-[var(--gold)] border border-[var(--border-gold)] px-2 py-1 rounded">
-              {perfume.category}
+              {perfume.category || "Perfume"}
             </span>
             <button
               onClick={toggleWishlist}
@@ -457,7 +474,7 @@ export default function PerfumePage({ params }: { params: Promise<{ id: string }
           {/* Stock status */}
           <p className="text-xs text-[var(--text-muted)]">
             Stock: <span className={outOfStock ? "text-[var(--error)]" : "text-[var(--success)]"}>
-              {outOfStock ? "Out of Stock" : `${perfume.totalStockMl}ml available`}
+              {outOfStock ? "Out of Stock" : `${Number(perfume.totalStockMl || 0)}ml available`}
             </span>
           </p>
 

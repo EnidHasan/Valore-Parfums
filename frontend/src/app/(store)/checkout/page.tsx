@@ -102,6 +102,9 @@ interface PerfumeResponse {
   id: string;
   name: string;
   images?: string;
+  canonicalPath?: string;
+  brandSlug?: string;
+  slug?: string;
 }
 
 interface OrderErrorPayload {
@@ -163,6 +166,7 @@ function CheckoutContent() {
   const isBuyNow = Boolean(productId);
 
   const [directItem, setDirectItem] = useState<DisplayItem | null>(null);
+  const [directProductPath, setDirectProductPath] = useState<string>("");
   const [loadingDirect, setLoadingDirect] = useState(isBuyNow);
 
   const [form, setForm] = useState<CheckoutForm>({
@@ -300,6 +304,9 @@ function CheckoutContent() {
             : 0;
 
           const images = p.images ? (JSON.parse(p.images) as string[]) : [];
+          setDirectProductPath(
+            p.canonicalPath || (p.brandSlug && p.slug ? `/brand/${p.brandSlug}/${p.slug}` : ""),
+          );
           setDirectItem({
             perfumeId: p.id,
             perfumeName: p.name,
@@ -727,7 +734,7 @@ function CheckoutContent() {
     <div className="min-h-screen pb-28 lg:pb-8">
       <div className="mx-auto max-w-6xl px-4 pb-10 pt-5 sm:px-6 sm:pt-8">
         <Link
-          href={isBuyNow ? (productSlug ? `/products/${productSlug}` : `/perfume/${productId}`) : "/cart"}
+          href={isBuyNow ? (directProductPath || (productSlug ? `/products/${productSlug}` : `/perfume/${productId}`)) : "/cart"}
           className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.18em] text-[var(--text-muted)] transition-colors hover:text-[#C9A96E]"
         >
           <ArrowLeft size={13} /> Back to {isBuyNow ? "Product" : "Cart"}

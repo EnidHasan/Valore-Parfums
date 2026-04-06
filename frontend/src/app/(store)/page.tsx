@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { ChevronDown, ArrowRight } from "lucide-react";
+import { buildCanonicalProductPath } from "@/lib/product-path";
 
 interface Perfume {
   id: string;
@@ -34,7 +35,7 @@ function PerfumeCard({ perfume, prices }: { perfume: Perfume; prices?: PriceInfo
   const isDynamicBestSeller = Number(perfume.totalOrders || 0) > 0 || perfume.isBestSeller;
 
   return (
-    <Link href={perfume.canonicalPath || `/products/${perfume.slug}`}>
+    <Link href={perfume.canonicalPath || buildCanonicalProductPath(perfume)}>
       <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded overflow-hidden card-hover group">
         <div className="aspect-[3/4] bg-[var(--bg-surface)] relative img-zoom">
           {images[0] ? (

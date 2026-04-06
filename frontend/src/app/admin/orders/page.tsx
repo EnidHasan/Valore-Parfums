@@ -250,7 +250,7 @@ export default function OrdersPage() {
   };
 
   const showPendingBankPayments = () => {
-    setStatusFilter("Pending Bank Verification");
+    setStatusFilter((prev) => (prev === "Pending Bank Verification" ? "" : "Pending Bank Verification"));
     setSortBy("newest");
   };
 
@@ -651,7 +651,7 @@ export default function OrdersPage() {
             return (
               <button
                 key={s}
-                onClick={() => setStatusFilter(s)}
+                onClick={() => setStatusFilter((prev) => (prev === s ? "" : s))}
                 className={`px-3 py-1.5 text-[10px] uppercase tracking-wider rounded transition-colors ${
                   statusFilter === s
                     ? "bg-[var(--gold)] text-black"
@@ -707,7 +707,7 @@ export default function OrdersPage() {
             return (
               <button
                 key={key}
-                onClick={() => setSourceFilter(key)}
+                onClick={() => setSourceFilter((prev) => (prev === key ? "all" : key))}
                 className={`px-3 py-1.5 text-[10px] uppercase tracking-wider rounded transition-colors ${
                   sourceFilter === key
                     ? "bg-[var(--gold)] text-black"
@@ -730,7 +730,7 @@ export default function OrdersPage() {
             return (
               <button
                 key={key}
-                onClick={() => setSizeTypeFilter(key)}
+                onClick={() => setSizeTypeFilter((prev) => (prev === key ? "all" : key))}
                 className={`px-3 py-1.5 text-[10px] uppercase tracking-wider rounded transition-colors ${
                   sizeTypeFilter === key
                     ? "bg-[var(--gold)] text-black"

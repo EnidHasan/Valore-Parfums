@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getActivePerfumes, buildCanonicalProductPath } from "@/lib/seo-catalog";
 
+export const revalidate = 300;
+
 export async function generateMetadata({ params }: { params: Promise<{ brand: string }> }): Promise<Metadata> {
   const { brand } = await params;
   const brandName = brand.replace(/-/g, " ");
@@ -22,7 +24,7 @@ export default async function BrandPage({ params }: { params: Promise<{ brand: s
 
       <section className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-3">
         {perfumes.map((perfume) => (
-          <Link key={perfume.id} href={`/products/${perfume.slug}`} className="border border-[var(--border)] rounded p-4 hover:border-[var(--gold)] transition-colors">
+          <Link key={perfume.id} href={buildCanonicalProductPath(perfume)} className="border border-[var(--border)] rounded p-4 hover:border-[var(--gold)] transition-colors">
             <h2 className="text-sm font-medium">{perfume.name}</h2>
             <p className="text-xs text-[var(--text-muted)]">{perfume.name} decant Bangladesh</p>
           </Link>
