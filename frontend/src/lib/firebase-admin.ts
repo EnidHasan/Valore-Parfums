@@ -14,6 +14,8 @@ function normalizePrivateKey(raw: string): string {
   }
 
   return value
+    .replace(/\\\\r\\\\n/g, "\n")
+    .replace(/\\\\n/g, "\n")
     .replace(/\\r\\n/g, "\n")
     .replace(/\\n/g, "\n")
     .replace(/\r\n/g, "\n");
