@@ -3,13 +3,30 @@
 import { initializeApp, getApps, cert, type ServiceAccount } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 
+function normalizePrivateKey(raw: string): string {
+  let value = raw.trim();
+
+  // Render/dashboard env entries are sometimes pasted with wrapping quotes.
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    value = value.slice(1, -1);
+  }
+
+  return value
+    .replace(/\\r\\n/g, "\n")
+    .replace(/\\n/g, "\n")
+    .replace(/\r\n/g, "\n");
+}
+
 const projectId =
   process.env.FIREBASE_PROJECT_ID ||
   process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ||
   process.env.GOOGLE_CLOUD_PROJECT ||
   "";
 const clientEmail = process.env.FIREBASE_CLIENT_EMAIL || "";
-const privateKey = (process.env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
+const privateKey = normalizePrivateKey(process.env.FIREBASE_PRIVATE_KEY || "");
 
 const hasFullServiceAccount = Boolean(projectId && clientEmail && privateKey);
 

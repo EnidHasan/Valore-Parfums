@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev -p 3001",
     "build": "next build",
-    "start": "next start -p 3001",
+    "start": "node scripts/start-server.cjs",
     "lint": "eslint"
   },
   "dependencies": {
@@ -20,6 +20,7 @@
     "recharts": "^3.7.0",
     "sharp": "^0.34.5",
     "uuid": "^13.0.0",
+    "valore-parfums-monorepo": "file:..",
     "zustand": "^5.0.11"
   },
   "devDependencies": {
