@@ -3,25 +3,53 @@
 import { initializeApp, getApps, cert, type ServiceAccount } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 
+function normalizePrivateKey(raw: string): string {
+  let value = raw.trim();
+
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    value = value.slice(1, -1);
+  }
+
+  return value
+    .replace(/\\r\\n/g, "\n")
+    .replace(/\\n/g, "\n")
+    .replace(/\r\n/g, "\n");
+}
+
 const projectId =
   process.env.FIREBASE_PROJECT_ID ||
   process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ||
   process.env.GOOGLE_CLOUD_PROJECT ||
   "";
 const clientEmail = process.env.FIREBASE_CLIENT_EMAIL || "";
-const privateKey = (process.env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
+const privateKey = normalizePrivateKey(process.env.FIREBASE_PRIVATE_KEY || "");
 
 const hasFullServiceAccount = Boolean(projectId && clientEmail && privateKey);
 
 // Prevent re-initializing in dev (hot-reload)
 if (!getApps().length) {
   if (hasFullServiceAccount) {
-    const serviceAccount: ServiceAccount = {
-      projectId,
-      clientEmail,
-      privateKey,
-    };
-    initializeApp({ credential: cert(serviceAccount) });
+    try {
+      const serviceAccount: ServiceAccount = {
+        projectId,
+        clientEmail,
+        privateKey,
+      };
+      initializeApp({ credential: cert(serviceAccount) });
+    } catch (error) {
+      if (projectId) {
+        initializeApp({ projectId });
+        console.warn(
+          "Firebase Admin cert init failed; using project-only init. Check FIREBASE_PRIVATE_KEY format.",
+          error,
+        );
+      } else {
+        throw error;
+      }
+    }
   } else if (projectId) {
     // Fallback to ADC/project-only init to avoid hard-crashing when cert vars are incomplete.
     initializeApp({ projectId });
